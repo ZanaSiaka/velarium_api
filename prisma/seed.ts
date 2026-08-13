@@ -53,7 +53,9 @@ async function main() {
     update: {},
     create: {
       reference: '2026-001',
-      type: 'Recouvrement',
+      // type: 'Recouvrement',
+      natureAffaire: 'Recouvrement',
+      typeDossier: 'Contentieux',
       statut: DossierStatut.EN_COURS,
       clientId: client1.id,
       avocatResponsableId: avocat.id,
@@ -67,7 +69,8 @@ async function main() {
     update: {},
     create: {
       reference: '2026-002',
-      type: 'Droit des affaires / OHADA',
+      natureAffaire: 'Droit des affaires / OHADA',
+      typeDossier: 'Conseil',
       statut: DossierStatut.EN_ATTENTE,
       clientId: client2.id,
       avocatResponsableId: avocat.id,

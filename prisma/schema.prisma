@@ -22,13 +22,13 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String  @unique
   passwordHash String
-  role         Role     @default(COLLABORATEUR)
+  role         Role    @default(COLLABORATEUR)
   image        String?
-  active       Boolean  @default(true)
+  active       Boolean @default(true)
 
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret  String?
@@ -87,20 +87,47 @@ enum DossierStatut {
 }
 
 model Dossier {
-  id        String        @id @default(cuid())
-  reference String        @unique
-  type      String
-  statut    DossierStatut @default(EN_COURS)
+  id        String @id @default(cuid())
+  reference String @unique
 
+  // Ancien champ conservé temporairement
+  // pour migrer les données existantes.
+  type String?
+
+  // Informations du dossier
+  // Temporairement optionnels pour permettre
+  // la migration des dossiers existants.
+  natureAffaire String?
+  typeDossier   String?
+
+  statut DossierStatut @default(EN_COURS)
+
+  // Client
   clientId String
   client   Client @relation(fields: [clientId], references: [id])
 
+  // Avocat responsable
   avocatResponsableId String
   avocatResponsable   User   @relation("DossierAvocatResponsable", fields: [avocatResponsableId], references: [id])
 
+  // Informations judiciaires
   juridiction   String?
   partieAdverse String?
 
+  // Avocat du client
+  avocatClientNom       String?
+  avocatClientEmail     String?
+  avocatClientTelephone String?
+
+  // KYC
+  kycSoupcon         Boolean @default(false)
+  declarationSoupcon String?
+
+  // Archivage
+  archive    Boolean   @default(false)
+  archivedAt DateTime?
+
+  // Dates
   dateOuverture DateTime  @default(now())
   dateCloture   DateTime?
 

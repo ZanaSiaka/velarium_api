@@ -1,27 +1,93 @@
-import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { DossierStatut } from '../../../../generated/prisma/client';
+import {
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+}
+  from 'class-validator'
+
+import { DossierStatut } from '../../../../generated/prisma/client'
 
 export class CreateDossierDto {
+  // ============================================================
+  // INFORMATIONS DU DOSSIER
+  // ============================================================
+
   @IsNotEmpty()
-  type: string;
+  @IsString()
+  natureAffaire: string
+
+  @IsNotEmpty()
+  @IsString()
+  typeDossier: string
 
   @IsEnum(DossierStatut)
-  statut: DossierStatut;
+  statut: DossierStatut
+
+  // ============================================================
+  // CLIENT
+  // ============================================================
 
   @IsNotEmpty()
-  clientId: string;
+  @IsString()
+  clientId: string
+
+  // ============================================================
+  // AVOCAT RESPONSABLE
+  // ============================================================
 
   @IsNotEmpty()
-  avocatResponsableId: string;
+  @IsString()
+  avocatResponsableId: string
+
+  // ============================================================
+  // AVOCAT DU CLIENT
+  // ============================================================
+
+  @IsOptional()
+  @IsString()
+  avocatClientNom?: string
+
+  @IsOptional()
+  @IsEmail()
+  avocatClientEmail?: string
+
+  @IsOptional()
+  @IsString()
+  avocatClientTelephone?: string
+
+  // ============================================================
+  // COLLABORATEURS
+  // ============================================================
 
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
-  collaborateurIds?: string[];
+  collaborateurIds?: string[]
+
+  // ============================================================
+  // INFORMATIONS JURIDIQUES
+  // ============================================================
 
   @IsOptional()
-  juridiction?: string;
+  @IsString()
+  juridiction?: string
 
   @IsOptional()
-  partieAdverse?: string;
+  @IsString()
+  partieAdverse?: string
+
+  // ============================================================
+  // KYC
+  // ============================================================
+
+  @IsBoolean()
+  kycSoupcon: boolean
+
+  @IsOptional()
+  @IsString()
+  declarationSoupcon?: string
 }
