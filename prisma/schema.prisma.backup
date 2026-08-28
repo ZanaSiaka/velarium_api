@@ -383,14 +383,29 @@ model Tache {
 
   dateEcheance DateTime?
 
+  // Utilisateur qui crée la tâche
   createurId String
-  createur   User   @relation("TachesCreees", fields: [createurId], references: [id])
+  createur User @relation(
+  "TachesCreees",
+  fields: [createurId],
+  references id[]
+  )
 
+  // Utilisateur auquel la tâche est assignée
   assigneAId String
-  assigneA   User   @relation("TachesAssignees", fields: [assigneAId], references: [id])
+  assigneA User @relation(
+  "TachesAssignees",
+  fields: [assigneAId],
+  references id[]
+  )
 
+  // Dossier auquel la tâche est éventuellement liée
   dossierId String?
-  dossier   Dossier? @relation(fields: [dossierId], references: [id], onDelete: SetNull)
+  dossier Dossier? @relation(
+  fields: [dossierId],
+  references: [id],
+  onDelete  SetNull
+  )
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

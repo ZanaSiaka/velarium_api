@@ -13,7 +13,7 @@ export class DocumentsService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly activityLog: ActivityLogService,
-  ) {}
+  ) { }
 
   async presignUpload(dto: PresignUploadDto) {
     const storageKey = `dossiers/${dto.dossierId}/${randomUUID()}-${dto.filename}`;
@@ -82,5 +82,34 @@ export class DocumentsService {
     await this.s3.deleteObject(document.storageKey);
     await this.prisma.document.delete({ where: { id } });
     return { success: true };
+  }
+
+  async findFolders() {
+    const dossiers = await this.prisma.dossier.findMany({
+      where: {
+        documents: {
+          some: {},
+        },
+      },
+      select: {
+        id: true,
+        reference: true,
+        natureAffaire: true,
+        typeDossier: true,
+        _count: {
+          select: {
+            documents: true,
+          },
+        },
+      },
+    })
+
+    return dossiers.map((dossier) => ({
+      id: dossier.id,
+      reference: dossier.reference,
+      natureAffaire: dossier.natureAffaire,
+      typeDossier: dossier.typeDossier,
+      documentCount: dossier._count.documents,
+    }))
   }
 }

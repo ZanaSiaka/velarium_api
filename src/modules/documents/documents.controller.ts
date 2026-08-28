@@ -10,8 +10,12 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 @ApiBearerAuth()
 @Controller('documents')
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(private readonly documentsService: DocumentsService) { }
 
+  @Get("folders")
+  async findFolders() {
+    return this.documentsService.findFolders()
+  }
   @Post('presign')
   presign(@Body() dto: PresignUploadDto) {
     return this.documentsService.presignUpload(dto);
@@ -31,6 +35,7 @@ export class DocumentsController {
   download(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
     return this.documentsService.getDownloadUrl(id, user.id);
   }
+
 
   @Delete(':id')
   remove(@Param('id') id: string) {

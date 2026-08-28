@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 
+import { TasksModule } from './modules/tasks/tasks.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -30,6 +31,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     ProvisionsModule,
     ActivityLogModule,
     DashboardModule,
+    TasksModule,
   ],
   controllers: [AppController],
   providers: [
@@ -38,4 +40,4 @@ import { RolesGuard } from './common/guards/roles.guard';
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
-export class AppModule {}
+export class AppModule { }
