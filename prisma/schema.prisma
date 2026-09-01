@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -10,47 +7,75 @@ datasource db {
   provider = "postgresql"
 }
 
-// ============================================================
-// Utilisateurs & authentification
-// ============================================================
-
-enum Role {
-  AVOCAT
-  COLLABORATEUR
-  SECRETARIAT
-  COMPTABLE
+model User {
+  id                    String                 @id @default(cuid())
+  name                  String
+  email                 String                 @unique
+  passwordHash          String
+  role                  Role                   @default(COLLABORATEUR)
+  image                 String?
+  twoFactorEnabled      Boolean                @default(false)
+  twoFactorSecret       String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  active                Boolean                @default(true)
+  activityLogs          ActivityLog[]
+  documentsDeposes      Document[]             @relation("DocumentUploadedBy")
+  documentConsultations DocumentConsultation[]
+  dossiersResponsable   Dossier[]              @relation("DossierAvocatResponsable")
+  dossierCollaborations DossierCollaborateur[]
+  evenementsCrees       Evenement[]            @relation("EvenementCreatedBy")
+  tachesAssignees       Tache[]                @relation("TachesAssignees")
+  tachesCreees          Tache[]                @relation("TachesCreees")
+  contrats              ContratUtilisateur[]   @relation("UserContrats")
+  pieces                PieceUtilisateur[]     @relation("UserPieces")
 }
 
-model User {
-  id               String  @id @default(cuid())
-  name             String
-  email            String  @unique
-  passwordHash     String
-  role             Role    @default(COLLABORATEUR)
-  image            String?
-  active           Boolean @default(true)
-  twoFactorEnabled Boolean @default(false)
-  twoFactorSecret  String?
+model ContratUtilisateur {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation("UserContrats", fields: [userId], references: [id], onDelete: Cascade)
+
+  type TypeContrat
+
+  dateDebut DateTime
+  dateFin   DateTime?
+
+  poste String?
+
+  actif Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  dossiersResponsable   Dossier[]              @relation("DossierAvocatResponsable")
-  dossierCollaborations DossierCollaborateur[]
-  evenementsCrees       Evenement[]            @relation("EvenementCreatedBy")
-  documentsDeposes      Document[]             @relation("DocumentUploadedBy")
-  documentConsultations DocumentConsultation[]
-  activityLogs          ActivityLog[]
+  pieces PieceUtilisateur[]
 
-  // Tâches créées par l'utilisateur
-  tachesCreees Tache[] @relation("TachesCreees")
-
-  // Tâches assignées à l'utilisateur
-  tachesAssignees Tache[] @relation("TachesAssignees")
+  @@index([userId])
 }
 
-// Réutilisé pour le flow "mot de passe oublié" (pas de fournisseur d'email
-// réel pour ce pilote : le lien est loggé côté serveur).
+model PieceUtilisateur {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation("UserPieces", fields: [userId], references: [id], onDelete: Cascade)
+
+  contratId String?
+  contrat   ContratUtilisateur? @relation(fields: [contratId], references: [id], onDelete: SetNull)
+
+  type TypePieceUtilisateur
+
+  nom String
+  url String
+
+  dateExpiration DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([contratId])
+}
 
 model PasswordResetToken {
   id         String   @id @default(cuid())
@@ -61,15 +86,6 @@ model PasswordResetToken {
   @@unique([identifier, token])
 }
 
-// ============================================================
-// Module 2 — Dossiers & Clients
-// ============================================================
-
-enum ClientType {
-  PARTICULIER
-  ENTREPRISE
-}
-
 model Client {
   id        String     @id @default(cuid())
   type      ClientType @default(PARTICULIER)
@@ -78,105 +94,55 @@ model Client {
   telephone String?
   adresse   String?
   notes     String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  dossiers Dossier[]
-  factures Facture[]
-}
-
-enum DossierStatut {
-  EN_COURS
-  EN_ATTENTE
-  CLOTURE
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  dossiers  Dossier[]
+  factures  Facture[]
 }
 
 model Dossier {
-  id        String @id @default(cuid())
-  reference String @unique
-
-  // Ancien champ conservé temporairement
-  // pour migrer les données existantes.
-  type String?
-
-  // Informations du dossier
-  // Temporairement optionnels pour permettre
-  // la migration des dossiers existants.
-  natureAffaire String?
-  typeDossier   String?
-
-  statut DossierStatut @default(EN_COURS)
-
-  // Client
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-
-  // Avocat responsable
-  avocatResponsableId String
-  avocatResponsable   User   @relation("DossierAvocatResponsable", fields: [avocatResponsableId], references: [id])
-
-  // Informations judiciaires
-  juridiction   String?
-  partieAdverse String?
-
-  // Avocat du client
-  avocatClientNom       String?
+  id                    String                 @id @default(cuid())
+  reference             String                 @unique
+  type                  String?
+  statut                DossierStatut          @default(EN_COURS)
+  clientId              String
+  avocatResponsableId   String
+  juridiction           String?
+  partieAdverse         String?
+  dateOuverture         DateTime               @default(now())
+  dateCloture           DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  archive               Boolean                @default(false)
+  archivedAt            DateTime?
   avocatClientEmail     String?
+  avocatClientNom       String?
   avocatClientTelephone String?
-
-  // KYC
-  kycSoupcon         Boolean @default(false)
-  declarationSoupcon String?
-
-  // Archivage
-  archive    Boolean   @default(false)
-  archivedAt DateTime?
-
-  // Dates
-  dateOuverture DateTime  @default(now())
-  dateCloture   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
+  declarationSoupcon    String?
+  kycSoupcon            Boolean                @default(false)
+  natureAffaire         String?
+  typeDossier           String?
+  activityLogs          ActivityLog[]
+  conventionsHonoraires ConventionHonoraires[]
+  documents             Document[]
+  avocatResponsable     User                   @relation("DossierAvocatResponsable", fields: [avocatResponsableId], references: [id])
+  client                Client                 @relation(fields: [clientId], references: [id])
   collaborateurs        DossierCollaborateur[]
   evenements            Evenement[]
-  conventionsHonoraires ConventionHonoraires[]
   factures              Facture[]
   provisions            Provision[]
-  documents             Document[]
-  activityLogs          ActivityLog[]
-
-  // Tâches liées au dossier
-  taches Tache[]
+  taches                Tache[]
 }
-
-// Table de jointure dossier <-> collaborateurs : sert aussi de liste
-// d'accès pour le cloisonnement "par dossier" (module Rôles & sécurité).
 
 model DossierCollaborateur {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   dossierId String
-  dossier   Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  userId    String
   createdAt DateTime @default(now())
+  dossier   Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([dossierId, userId])
-}
-
-// ============================================================
-// Module 4 — Agenda & échéances
-// ============================================================
-
-enum EvenementType {
-  AUDIENCE
-  DELAI
-  DEPOT
-  RENDEZ_VOUS
-  AUTRE
 }
 
 model Evenement {
@@ -188,32 +154,163 @@ model Evenement {
   color       String?
   eventType   EvenementType @default(AUTRE)
   location    String?
-
-  dossierId String?
-  dossier   Dossier? @relation(fields: [dossierId], references: [id], onDelete: SetNull)
-
+  dossierId   String?
   createdById String
-  createdBy   User   @relation("EvenementCreatedBy", fields: [createdById], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdBy   User          @relation("EvenementCreatedBy", fields: [createdById], references: [id])
+  dossier     Dossier?      @relation(fields: [dossierId], references: [id])
 }
 
-// ============================================================
-// Module 3 — Cycle financier / FNE
-// ============================================================
-
 model ConventionHonoraires {
-  id        String  @id @default(cuid())
-  dossierId String
-  dossier   Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
-
+  id                 String   @id @default(cuid())
+  dossierId          String
   montantForfaitaire Decimal? @db.Decimal(14, 2)
   tauxHoraire        Decimal? @db.Decimal(14, 2)
   conditions         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  dossier            Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+}
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Facture {
+  id           String         @id @default(cuid())
+  numero       String         @unique
+  statut       FactureStatut  @default(BROUILLON)
+  dossierId    String
+  clientId     String
+  dateEmission DateTime       @default(now())
+  dateEcheance DateTime
+  montantHT    Decimal        @db.Decimal(14, 2)
+  tauxTVA      Decimal        @default(18) @db.Decimal(5, 2)
+  montantTVA   Decimal        @db.Decimal(14, 2)
+  montantTTC   Decimal        @db.Decimal(14, 2)
+  mentionRCCM  String?
+  mentionNCC   String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  client       Client         @relation(fields: [clientId], references: [id])
+  dossier      Dossier        @relation(fields: [dossierId], references: [id])
+  lignes       LigneFacture[]
+  paiements    Paiement[]
+}
+
+model LigneFacture {
+  id           String  @id @default(cuid())
+  factureId    String
+  description  String
+  quantite     Decimal @default(1) @db.Decimal(10, 2)
+  prixUnitaire Decimal @db.Decimal(14, 2)
+  montant      Decimal @db.Decimal(14, 2)
+  facture      Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+}
+
+model Paiement {
+  id            String   @id @default(cuid())
+  factureId     String
+  montant       Decimal  @db.Decimal(14, 2)
+  datePaiement  DateTime @default(now())
+  moyenPaiement String?
+  note          String?
+  createdAt     DateTime @default(now())
+  facture       Facture  @relation(fields: [factureId], references: [id], onDelete: Cascade)
+}
+
+model Provision {
+  id           String   @id @default(cuid())
+  dossierId    String
+  montant      Decimal  @db.Decimal(14, 2)
+  datePaiement DateTime @default(now())
+  note         String?
+  createdAt    DateTime @default(now())
+  dossier      Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id            String                 @id @default(cuid())
+  nom           String
+  dossierId     String
+  storageKey    String
+  url           String?
+  taille        Int?
+  type          String?
+  visibilite    DocumentVisibilite     @default(INTERNE)
+  uploadedById  String
+  createdAt     DateTime               @default(now())
+  dossier       Dossier                @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  uploadedBy    User                   @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  consultations DocumentConsultation[]
+}
+
+model DocumentConsultation {
+  id          String   @id @default(cuid())
+  documentId  String
+  userId      String
+  consultedAt DateTime @default(now())
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  dossierId  String?
+  createdAt  DateTime @default(now())
+  dossier    Dossier? @relation(fields: [dossierId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model Tache {
+  id           String        @id @default(cuid())
+  titre        String
+  description  String?
+  statut       TacheStatut   @default(A_FAIRE)
+  priorite     TachePriorite @default(NORMALE)
+  dateEcheance DateTime?
+  createurId   String
+  assigneAId   String
+  dossierId    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  assigneA     User          @relation("TachesAssignees", fields: [assigneAId], references: [id])
+  createur     User          @relation("TachesCreees", fields: [createurId], references: [id])
+  dossier      Dossier?      @relation(fields: [dossierId], references: [id])
+
+  @@index([assigneAId])
+  @@index([createurId])
+  @@index([dossierId])
+  @@index([statut])
+  @@index([dateEcheance])
+}
+
+enum Role {
+  AVOCAT
+  COLLABORATEUR
+  SECRETARIAT
+  COMPTABLE
+}
+
+enum ClientType {
+  PARTICULIER
+  ENTREPRISE
+}
+
+enum DossierStatut {
+  EN_COURS
+  EN_ATTENTE
+  CLOTURE
+}
+
+enum EvenementType {
+  AUDIENCE
+  DELAI
+  DEPOT
+  RENDEZ_VOUS
+  AUTRE
 }
 
 enum FactureStatut {
@@ -224,139 +321,10 @@ enum FactureStatut {
   EN_RETARD
 }
 
-model Facture {
-  id     String        @id @default(cuid())
-  numero String        @unique
-  statut FactureStatut @default(BROUILLON)
-
-  dossierId String
-  dossier   Dossier @relation(fields: [dossierId], references: [id])
-
-  clientId String
-  client   Client @relation(fields: [clientId], references: [id])
-
-  dateEmission DateTime @default(now())
-  dateEcheance DateTime
-
-  montantHT  Decimal @db.Decimal(14, 2)
-  tauxTVA    Decimal @default(18) @db.Decimal(5, 2)
-  montantTVA Decimal @db.Decimal(14, 2)
-  montantTTC Decimal @db.Decimal(14, 2)
-
-  // Mentions obligatoires FNE (logique "option A" du CDC).
-  mentionRCCM String?
-  mentionNCC  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  lignes    LigneFacture[]
-  paiements Paiement[]
-}
-
-model LigneFacture {
-  id        String  @id @default(cuid())
-  factureId String
-  facture   Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
-
-  description  String
-  quantite     Decimal @default(1) @db.Decimal(10, 2)
-  prixUnitaire Decimal @db.Decimal(14, 2)
-  montant      Decimal @db.Decimal(14, 2)
-}
-
-model Paiement {
-  id        String  @id @default(cuid())
-  factureId String
-  facture   Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
-
-  montant       Decimal  @db.Decimal(14, 2)
-  datePaiement  DateTime @default(now())
-  moyenPaiement String?
-  note          String?
-
-  createdAt DateTime @default(now())
-}
-
-model Provision {
-  id        String  @id @default(cuid())
-  dossierId String
-  dossier   Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
-
-  montant      Decimal  @db.Decimal(14, 2)
-  datePaiement DateTime @default(now())
-  note         String?
-
-  createdAt DateTime @default(now())
-}
-
-// ============================================================
-// Module 5 — Documents (coffre-fort par dossier)
-// ============================================================
-
 enum DocumentVisibilite {
   INTERNE
   VISIBLE_CLIENT
 }
-
-model Document {
-  id  String @id @default(cuid())
-  nom String
-
-  dossierId String
-  dossier   Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
-
-  storageKey String
-  url        String?
-  taille     Int?
-  type       String?
-
-  visibilite DocumentVisibilite @default(INTERNE)
-
-  uploadedById String
-  uploadedBy   User   @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
-
-  createdAt DateTime @default(now())
-
-  consultations DocumentConsultation[]
-}
-
-// Journal des consultations : qui a ouvert quel document, quand.
-
-model DocumentConsultation {
-  id         String   @id @default(cuid())
-  documentId String
-  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  consultedAt DateTime @default(now())
-}
-
-// ============================================================
-// Module 6 — Rôles & sécurité (journal d'activité générique)
-// ============================================================
-
-model ActivityLog {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  action     String
-  entityType String
-  entityId   String
-  metadata   Json?
-
-  dossierId String?
-  dossier   Dossier? @relation(fields: [dossierId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-}
-
-// ============================================================
-// Module 7 — Assignation de tâches
-// ============================================================
 
 enum TacheStatut {
   A_FAIRE
@@ -372,32 +340,23 @@ enum TachePriorite {
   URGENTE
 }
 
-model Tache {
-  id String @id @default(cuid())
+enum TypeContrat {
+  CDI
+  CDD
+  STAGE
+  ALTERNANCE
+  FREELANCE
+  PRESTATION
+  AUTRE
+}
 
-  titre       String
-  description String?
-
-  statut   TacheStatut   @default(A_FAIRE)
-  priorite TachePriorite @default(NORMALE)
-
-  dateEcheance DateTime?
-
-  createurId String
-  createur   User   @relation("TachesCreees", fields: [createurId], references: [id])
-
-  assigneAId String
-  assigneA   User   @relation("TachesAssignees", fields: [assigneAId], references: [id])
-
-  dossierId String?
-  dossier   Dossier? @relation(fields: [dossierId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([assigneAId])
-  @@index([createurId])
-  @@index([dossierId])
-  @@index([statut])
-  @@index([dateEcheance])
+enum TypePieceUtilisateur {
+  CNI
+  PASSEPORT
+  CONTRAT
+  DIPLOME
+  ATTESTATION
+  CV
+  PHOTO
+  AUTRE
 }

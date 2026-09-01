@@ -1,5 +1,14 @@
-import { IsEmail, IsEnum, IsNotEmpty, MinLength } from 'class-validator';
-import { Role } from '../../../../generated/prisma/client';
+import {
+  IsDateString,
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
+
+import { Role, TypeContrat } from '../../../../generated/prisma/client';
 
 export class CreateUserDto {
   @IsNotEmpty()
@@ -13,4 +22,20 @@ export class CreateUserDto {
 
   @IsEnum(Role)
   role: Role;
+
+  @IsOptional()
+  @IsEnum(TypeContrat)
+  typeContrat?: TypeContrat;
+
+  @IsOptional()
+  @IsDateString()
+  dateDebutContrat?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateFinContrat?: string;
+
+  @IsOptional()
+  @IsString()
+  posteContrat?: string;
 }
