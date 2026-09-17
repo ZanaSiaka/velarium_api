@@ -54,6 +54,18 @@ export class S3Service {
     return getSignedUrl(this.client, command, { expiresIn: 300 });
   }
 
+  getViewUrl(key: string) {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ResponseContentDisposition: 'inline',
+    });
+
+    return getSignedUrl(this.client, command, {
+      expiresIn: 300,
+    });
+  }
+
   async deleteObject(key: string) {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),

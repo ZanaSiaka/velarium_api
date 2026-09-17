@@ -1,8 +1,20 @@
-import { IsDateString, IsNotEmpty, IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class CreateProvisionDto {
   @IsNotEmpty()
+  @IsString()
   dossierId: string;
+
+  @IsOptional()
+  @IsString()
+  factureId?: string;
 
   @IsNumber()
   @Min(0.01)
@@ -13,5 +25,10 @@ export class CreateProvisionDto {
   datePaiement?: string;
 
   @IsOptional()
+  @IsString()
+  moyenPaiement?: string;
+
+  @IsOptional()
+  @IsString()
   note?: string;
 }

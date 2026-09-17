@@ -48,6 +48,11 @@ export class DossiersController {
   // DÉTAIL
   // ============================================================
 
+  @Get(':id/livre-paiements')
+  getLivrePaiements(@Param('id') id: string) {
+    return this.dossiersService.getLivrePaiements(id)
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.dossiersService.findOne(id)

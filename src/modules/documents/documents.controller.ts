@@ -35,7 +35,13 @@ export class DocumentsController {
   download(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
     return this.documentsService.getDownloadUrl(id, user.id);
   }
-
+  @Get(':id/view')
+  view(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.documentsService.getViewUrl(id, user.id);
+  }
 
   @Delete(':id')
   remove(@Param('id') id: string) {

@@ -10,13 +10,16 @@ import { UpdateClientDto } from './dto/update-client.dto';
 @ApiBearerAuth()
 @Controller('clients')
 export class ClientsController {
-  constructor(private readonly clientsService: ClientsService) {}
+  constructor(private readonly clientsService: ClientsService) { }
 
   @Get()
   findAll() {
     return this.clientsService.findAll();
   }
-
+  @Get(':id/livre-paiements')
+  getLivrePaiements(@Param('id') id: string) {
+    return this.clientsService.getLivrePaiements(id);
+  }
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.clientsService.findOne(id);

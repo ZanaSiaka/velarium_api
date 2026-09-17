@@ -77,6 +77,21 @@ export class DocumentsService {
     return { url };
   }
 
+  async getViewUrl(id: string, userId: string) {
+    const document = await this.findOne(id);
+
+    await this.prisma.documentConsultation.create({
+      data: {
+        documentId: document.id,
+        userId,
+      },
+    });
+
+    const url = await this.s3.getViewUrl(document.storageKey);
+
+    return { url };
+  }
+
   async remove(id: string) {
     const document = await this.findOne(id);
     await this.s3.deleteObject(document.storageKey);

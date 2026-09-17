@@ -75,31 +75,195 @@ export class DossiersService {
   // DETAIL D'UN DOSSIER
   // ============================================================
 
+
+
+  async getLivrePaiements(id: string) {
+    const dossier = await this.prisma.dossier.findUnique({
+      where: { id },
+      include: {
+        client: true,
+        factures: {
+          orderBy: { dateEmission: 'asc' },
+          include: {
+            paiements: {
+              orderBy: { datePaiement: 'asc' },
+            },
+          },
+        },
+        provisions: {
+          orderBy: { datePaiement: 'asc' },
+        },
+      },
+    })
+
+    if (!dossier) {
+      throw new NotFoundException('Dossier introuvable.')
+    }
+
+    // ============================================================
+    // TOTAL DES FACTURES
+    // ============================================================
+
+    const totalFacture = dossier.factures.reduce(
+      (sum, facture) =>
+        sum + Number(facture.montantTTC),
+      0,
+    )
+
+    // ============================================================
+    // TOTAL DES PAIEMENTS
+    // ============================================================
+
+    const totalPaiements = dossier.factures.reduce(
+      (sum, facture) =>
+        sum +
+        facture.paiements.reduce(
+          (paiementSum, paiement) =>
+            paiementSum + Number(paiement.montant),
+          0,
+        ),
+      0,
+    )
+
+    // ============================================================
+    // TOTAL DES PROVISIONS
+    // ============================================================
+
+    const totalProvisions = dossier.provisions.reduce(
+      (sum, provision) =>
+        sum + Number(provision.montant),
+      0,
+    )
+
+    // ============================================================
+    // TOTAL ENCAISSÉ
+    // ============================================================
+
+    const totalEncaisse =
+      totalPaiements + totalProvisions
+
+    // ============================================================
+    // SITUATION FINANCIÈRE
+    //
+    // Option 2 :
+    // - un dépassement devient un trop-perçu
+    // - le reste à payer ne peut jamais être négatif
+    // ============================================================
+
+    const resteAPayer = Math.max(
+      totalFacture - totalEncaisse,
+      0,
+    )
+
+    const tropPercu = Math.max(
+      totalEncaisse - totalFacture,
+      0,
+    )
+
+    // ============================================================
+    // HISTORIQUE DES OPÉRATIONS
+    // ============================================================
+
+    const operations = [
+      ...dossier.factures.flatMap((facture) =>
+        facture.paiements.map((paiement) => ({
+          id: paiement.id,
+          type: 'PAIEMENT' as const,
+          date: paiement.datePaiement,
+          montant: Number(paiement.montant),
+          moyenPaiement: paiement.moyenPaiement,
+          note: paiement.note,
+          facture: {
+            id: facture.id,
+            numero: facture.numero,
+            montantTTC: Number(facture.montantTTC),
+          },
+        })),
+      ),
+
+      ...dossier.provisions.map((provision) => ({
+        id: provision.id,
+        type: 'PROVISION' as const,
+        date: provision.datePaiement,
+        montant: Number(provision.montant),
+        moyenPaiement: provision.moyenPaiement,
+        note: provision.note,
+        facture: null,
+      })),
+    ].sort(
+      (a, b) =>
+        new Date(a.date).getTime() -
+        new Date(b.date).getTime(),
+    )
+
+    // ============================================================
+    // RÉPONSE
+    // ============================================================
+
+    return {
+      dossier: {
+        id: dossier.id,
+        reference: dossier.reference,
+        client: dossier.client,
+      },
+
+      totalFacture,
+      totalPaiements,
+      totalProvisions,
+      totalEncaisse,
+
+      resteAPayer,
+      tropPercu,
+
+      operations,
+    }
+  }
   async findOne(id: string) {
-    const dossier =
-      await this.prisma.dossier.findUnique({
-        where: {
-          id,
-        },
+    const dossier = await this.prisma.dossier.findUnique({
+      where: {
+        id,
+      },
 
-        include: {
-          client: true,
+      include: {
+        client: true,
 
-          avocatResponsable: true,
+        avocatResponsable: true,
 
-          collaborateurs: {
-            include: {
-              user: true,
-            },
-          },
-
-          evenements: {
-            orderBy: {
-              start: 'asc',
-            },
+        collaborateurs: {
+          include: {
+            user: true,
           },
         },
-      })
+
+        evenements: {
+          orderBy: {
+            start: 'asc',
+          },
+        },
+
+        factures: {
+          orderBy: {
+            dateEmission: 'asc',
+          },
+
+          include: {
+            lignes: true,
+
+            paiements: {
+              orderBy: {
+                datePaiement: 'asc',
+              },
+            },
+          },
+        },
+
+        provisions: {
+          orderBy: {
+            datePaiement: 'asc',
+          },
+        },
+      },
+    })
 
     if (!dossier) {
       throw new NotFoundException(
@@ -109,7 +273,6 @@ export class DossiersService {
 
     return dossier
   }
-
   // ============================================================
   // GENERATION DE LA REFERENCE
   // ============================================================

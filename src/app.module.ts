@@ -17,7 +17,8 @@ import { ActivityLogModule } from './modules/activity-log/activity-log.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
-
+import { PaiementsModule } from './modules/paiements/paiements.module';
+import { FinanceModule } from './modules/finance/finance.module';
 @Module({
   imports: [
     PrismaModule,
@@ -32,7 +33,10 @@ import { RolesGuard } from './common/guards/roles.guard';
     ActivityLogModule,
     DashboardModule,
     TasksModule,
+    PaiementsModule,
+    FinanceModule,
   ],
+
   controllers: [AppController],
   providers: [
     AppService,

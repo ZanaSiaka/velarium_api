@@ -29,6 +29,8 @@ model User {
   tachesCreees          Tache[]                @relation("TachesCreees")
   contrats              ContratUtilisateur[]   @relation("UserContrats")
   pieces                PieceUtilisateur[]     @relation("UserPieces")
+  mouvementsFinance     MouvementFinance[]
+  piecesJointesFinance  PieceJointeFinance[]   @relation("FinancePieceUploadedBy")
 }
 
 model ContratUtilisateur {
@@ -132,6 +134,7 @@ model Dossier {
   factures              Facture[]
   provisions            Provision[]
   taches                Tache[]
+  mouvementsFinance     MouvementFinance[]
 }
 
 model DossierCollaborateur {
@@ -174,25 +177,27 @@ model ConventionHonoraires {
 }
 
 model Facture {
-  id           String         @id @default(cuid())
-  numero       String         @unique
-  statut       FactureStatut  @default(BROUILLON)
+  id           String        @id @default(cuid())
+  numero       String        @unique
+  statut       FactureStatut @default(BROUILLON)
   dossierId    String
   clientId     String
-  dateEmission DateTime       @default(now())
+  dateEmission DateTime      @default(now())
   dateEcheance DateTime
-  montantHT    Decimal        @db.Decimal(14, 2)
-  tauxTVA      Decimal        @default(18) @db.Decimal(5, 2)
-  montantTVA   Decimal        @db.Decimal(14, 2)
-  montantTTC   Decimal        @db.Decimal(14, 2)
+  montantHT    Decimal       @db.Decimal(14, 2)
+  tauxTVA      Decimal       @default(18) @db.Decimal(5, 2)
+  montantTVA   Decimal       @db.Decimal(14, 2)
+  montantTTC   Decimal       @db.Decimal(14, 2)
   mentionRCCM  String?
   mentionNCC   String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  client       Client         @relation(fields: [clientId], references: [id])
-  dossier      Dossier        @relation(fields: [dossierId], references: [id])
-  lignes       LigneFacture[]
-  paiements    Paiement[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  client     Client         @relation(fields: [clientId], references: [id])
+  dossier    Dossier        @relation(fields: [dossierId], references: [id])
+  lignes     LigneFacture[]
+  paiements  Paiement[]
+  provisions Provision[]
 }
 
 model LigneFacture {
@@ -217,13 +222,21 @@ model Paiement {
 }
 
 model Provision {
-  id           String   @id @default(cuid())
-  dossierId    String
-  montant      Decimal  @db.Decimal(14, 2)
-  datePaiement DateTime @default(now())
-  note         String?
-  createdAt    DateTime @default(now())
-  dossier      Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  dossierId     String
+  factureId     String?
+  montant       Decimal  @db.Decimal(14, 2)
+  datePaiement  DateTime @default(now())
+  moyenPaiement String?
+  note          String?
+  createdAt     DateTime @default(now())
+
+  dossier Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  facture Facture? @relation(fields: [factureId], references: [id], onDelete: SetNull)
+
+  @@index([dossierId])
+  @@index([factureId])
+  @@index([datePaiement])
 }
 
 model Document {
@@ -285,6 +298,84 @@ model Tache {
   @@index([dossierId])
   @@index([statut])
   @@index([dateEcheance])
+}
+
+model Caisse {
+  id     String     @id @default(cuid())
+  nom    String
+  type   TypeCaisse
+  devise String     @default("XOF")
+
+  soldeInitial Decimal @default(0) @db.Decimal(15, 2)
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mouvements         MouvementFinance[] @relation("CaisseMouvements")
+  transfertsEntrants MouvementFinance[] @relation("CaisseDestination")
+}
+
+model MouvementFinance {
+  id      String               @id @default(cuid())
+  type    TypeMouvementFinance
+  montant Decimal              @db.Decimal(15, 2)
+
+  description String?
+  categorie   CategorieFinance
+  date        DateTime         @default(now())
+  reference   String?
+  pieceJointe String?
+
+  // Caisse concernée
+  caisseId String
+  caisse   Caisse @relation("CaisseMouvements", fields: [caisseId], references: [id])
+
+  // Utilisé uniquement pour les transferts
+  caisseDestinationId String?
+  caisseDestination   Caisse? @relation("CaisseDestination", fields: [caisseDestinationId], references: [id])
+
+  // Utilisateur ayant enregistré l'opération
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Peut être rattaché à un dossier
+  dossierId String?
+  dossier   Dossier? @relation(fields: [dossierId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  piecesJointes PieceJointeFinance[]
+
+  @@index([caisseId])
+  @@index([caisseDestinationId])
+  @@index([userId])
+  @@index([type])
+  @@index([categorie])
+  @@index([date])
+  @@index([dossierId])
+}
+
+model PieceJointeFinance {
+  id String @id @default(cuid())
+
+  nom        String
+  storageKey String  @unique
+  taille     Int?
+  type       String?
+
+  mouvementId String
+  mouvement   MouvementFinance @relation(fields: [mouvementId], references: [id], onDelete: Cascade)
+
+  uploadedById String
+  uploadedBy   User   @relation("FinancePieceUploadedBy", fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([mouvementId])
+  @@index([uploadedById])
 }
 
 enum Role {
@@ -358,5 +449,37 @@ enum TypePieceUtilisateur {
   ATTESTATION
   CV
   PHOTO
+  AUTRE
+}
+
+enum TypeCaisse {
+  ESPECES
+  BANQUE
+  WAVE
+  AUTRE
+}
+
+enum TypeMouvementFinance {
+  ENTREE
+  SORTIE
+  TRANSFERT
+}
+
+enum CategorieFinance {
+  HONORAIRES
+  PAIEMENT_FACTURE
+  PROVISION
+  REMBOURSEMENT
+  DEPOT
+  RETRAIT
+  ACHAT
+  FOURNITURES
+  SALAIRES
+  LOYER
+  ELECTRICITE
+  INTERNET
+  TRANSPORT
+  FRAIS_BANCAIRES
+  IMPOTS_TAXES
   AUTRE
 }
