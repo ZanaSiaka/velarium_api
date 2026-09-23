@@ -3,123 +3,191 @@ import {
     Injectable,
 } from '@nestjs/common';
 
-import { Role } from '../../../generated/prisma/client';
+import {
+    Role,
+} from '../../../generated/prisma/client';
 
 @Injectable()
 export class FinancePermissionService {
 
     // ============================================================
+    // HELPER INTERNE
+    // ============================================================
+
+    private isFinanceManager(
+        role: Role,
+    ): boolean {
+        return (
+            role === Role.AVOCAT ||
+            role === Role.COMPTABLE
+        );
+    }
+
+    // ============================================================
     // FINANCES
     // ============================================================
 
-    canViewFinance(role: Role): boolean {
-        return (
-            role === Role.AVOCAT ||
-            role === Role.COMPTABLE
+    canViewFinance(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
         );
     }
 
     // ============================================================
-    // CAISSES
+    // COMPTES
+    //
+    // Les noms internes "Caisse" sont conservés temporairement
+    // afin de ne pas casser les routes et le frontend.
     // ============================================================
 
-    canViewCaisses(role: Role): boolean {
-        return (
-            role === Role.AVOCAT ||
-            role === Role.COMPTABLE
+    canViewCaisses(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
         );
     }
 
-    canCreateCaisse(role: Role): boolean {
-        return role === Role.COMPTABLE;
+    canCreateCaisse(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
+        );
     }
 
-    canUpdateCaisse(role: Role): boolean {
-        return role === Role.COMPTABLE;
+    canUpdateCaisse(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
+        );
     }
 
-    canDeleteCaisse(role: Role): boolean {
-        return role === Role.COMPTABLE;
+    canDeleteCaisse(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
+        );
     }
 
     // ============================================================
     // MOUVEMENTS
     // ============================================================
 
-    canViewMouvements(role: Role): boolean {
-        return (
-            role === Role.AVOCAT ||
-            role === Role.COMPTABLE
+    canViewMouvements(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
         );
     }
 
-    canCreateMouvement(role: Role): boolean {
-        return role === Role.COMPTABLE;
+    canCreateMouvement(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
+        );
     }
 
     // ============================================================
     // PIECES JOINTES
     // ============================================================
 
-    canViewPieceJointes(role: Role): boolean {
-        return (
-            role === Role.AVOCAT ||
-            role === Role.COMPTABLE
+    canViewPieceJointes(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
         );
     }
 
-    canManagePieceJointes(role: Role): boolean {
-        return role === Role.COMPTABLE;
+    canManagePieceJointes(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
+        );
     }
 
     // ============================================================
     // AUDIT
     // ============================================================
 
-    canViewAudit(role: Role): boolean {
-        return role === Role.COMPTABLE;
+    canViewAudit(
+        role: Role,
+    ): boolean {
+        return this.isFinanceManager(
+            role,
+        );
     }
 
     // ============================================================
     // PERMISSIONS FRONTEND
     // ============================================================
 
-    getFinancePermissions(role: Role) {
+    getFinancePermissions(
+        role: Role,
+    ) {
         return {
             canViewFinance:
-                this.canViewFinance(role),
+                this.canViewFinance(
+                    role,
+                ),
 
             canViewCaisses:
-                this.canViewCaisses(role),
+                this.canViewCaisses(
+                    role,
+                ),
 
             canCreateCaisse:
-                this.canCreateCaisse(role),
+                this.canCreateCaisse(
+                    role,
+                ),
 
             canUpdateCaisse:
-                this.canUpdateCaisse(role),
+                this.canUpdateCaisse(
+                    role,
+                ),
 
             canDeleteCaisse:
-                this.canDeleteCaisse(role),
+                this.canDeleteCaisse(
+                    role,
+                ),
 
             canViewMouvements:
-                this.canViewMouvements(role),
+                this.canViewMouvements(
+                    role,
+                ),
 
             canCreateMouvement:
-                this.canCreateMouvement(role),
+                this.canCreateMouvement(
+                    role,
+                ),
 
             canViewPieceJointes:
-                this.canViewPieceJointes(role),
+                this.canViewPieceJointes(
+                    role,
+                ),
 
             canManagePieceJointes:
-                this.canManagePieceJointes(role),
+                this.canManagePieceJointes(
+                    role,
+                ),
 
             canViewAudit:
-                this.canViewAudit(role),
+                this.canViewAudit(
+                    role,
+                ),
         };
     }
 
     // ============================================================
-    // HELPER
+    // REQUIRE
     // ============================================================
 
     require(

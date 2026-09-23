@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 
+import { RecusModule } from './modules/recus/recus.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -33,6 +34,7 @@ import { FinanceModule } from './modules/finance/finance.module';
     ActivityLogModule,
     DashboardModule,
     TasksModule,
+    RecusModule,
     PaiementsModule,
     FinanceModule,
   ],

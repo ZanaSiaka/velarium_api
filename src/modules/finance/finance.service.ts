@@ -4,61 +4,157 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 
-import { PrismaService } from '../../prisma/prisma.service';
-import { ActivityLogService } from '../activity-log/activity-log.service';
-import { FinancePermissionService } from './finance-permission.service';
+import {
+    PrismaService,
+} from '../../prisma/prisma.service';
 
-import { CreateCaisseDto } from './dto/create-caisse.dto';
-import { UpdateCaisseDto } from './dto/update-caisse.dto';
-import { CreateMouvementDto } from './dto/create-mouvement.dto';
+import {
+    ActivityLogService,
+} from '../activity-log/activity-log.service';
 
-import { Role } from '../../../generated/prisma/client';
+import {
+    FinancePermissionService,
+} from './finance-permission.service';
 
+import {
+    CreateCaisseDto,
+} from './dto/create-caisse.dto';
+
+import {
+    UpdateCaisseDto,
+} from './dto/update-caisse.dto';
+
+import {
+    CreateMouvementDto,
+} from './dto/create-mouvement.dto';
+import {
+    MoyenOperationCompte,
+    Role,
+    SourceMouvementFinance,
+    TypeCaisse,
+} from '../../../generated/prisma/client';
 @Injectable()
 export class FinanceService {
+
     constructor(
-        private readonly prisma: PrismaService,
-        private readonly activityLog: ActivityLogService,
-        private readonly permissions: FinancePermissionService,
+        private readonly prisma:
+            PrismaService,
+
+        private readonly activityLog:
+            ActivityLogService,
+
+        private readonly permissions:
+            FinancePermissionService,
     ) { }
 
     // ============================================================
-    // CAISSES
+    // HELPERS
+    // ============================================================
+
+    private normalizeOptionalText(
+        value?: string,
+    ): string | null {
+        if (
+            value === undefined ||
+            value === null
+        ) {
+            return null;
+        }
+
+        const normalized =
+            value.trim();
+
+        return normalized.length >
+            0
+            ? normalized
+            : null;
+    }
+
+    private getDefaultMoyensOperation(
+        type: TypeCaisse,
+    ): MoyenOperationCompte[] {
+
+        switch (type) {
+
+            case TypeCaisse.BANCAIRE:
+                return [
+                    MoyenOperationCompte.VIREMENT,
+                    MoyenOperationCompte.CHEQUE,
+                ];
+
+            case TypeCaisse.EPARGNE:
+                return [
+                    MoyenOperationCompte.VIREMENT,
+                ];
+
+            case TypeCaisse.CARTE_BANCAIRE:
+                return [
+                    MoyenOperationCompte.CARTE,
+                ];
+
+            case TypeCaisse.MOBILE_MONEY:
+                return [
+                    MoyenOperationCompte.MOBILE_MONEY,
+                ];
+
+            case TypeCaisse.ESPECES:
+                return [
+                    MoyenOperationCompte.ESPECES,
+                ];
+
+            default:
+                return [];
+        }
+    }
+
+    // ============================================================
+    // COMPTES
+    //
+    // Le modèle Prisma s'appelle encore "Caisse"
+    // pendant la phase de transition.
     // ============================================================
 
     async findCaisses(
         role: Role,
     ) {
         this.permissions.require(
-            this.permissions.canViewCaisses(role),
-            'Vous n’avez pas les permissions nécessaires pour consulter les caisses.',
+            this.permissions.canViewCaisses(
+                role,
+            ),
+            'Vous n’avez pas les permissions nécessaires pour consulter les comptes financiers.',
         );
 
         const caisses =
             await this.prisma.caisse.findMany({
                 orderBy: {
-                    createdAt: 'asc',
+                    createdAt:
+                        'asc',
                 },
 
                 include: {
-                    mouvements: true,
-                    transfertsEntrants: true,
+                    mouvements:
+                        true,
+
+                    transfertsEntrants:
+                        true,
                 },
             });
 
         return caisses.map(
-            (caisse) => {
+            (
+                caisse,
+            ) => {
+
                 const soldeInitial =
                     Number(
                         caisse.soldeInitial,
                     );
 
-                let totalEntrees = 0;
-                let totalSorties = 0;
+                let totalEntrees =
+                    0;
 
-                // ------------------------------------------------
-                // MOUVEMENTS DE LA CAISSE
-                // ------------------------------------------------
+                let totalSorties =
+                    0;
 
                 for (
                     const mouvement
@@ -94,10 +190,6 @@ export class FinanceService {
                     }
                 }
 
-                // ------------------------------------------------
-                // TRANSFERTS ENTRANTS
-                // ------------------------------------------------
-
                 for (
                     const mouvement
                     of caisse.transfertsEntrants
@@ -119,9 +211,13 @@ export class FinanceService {
                     totalSorties;
 
                 const hasHistory =
-                    caisse.mouvements.length >
+                    caisse
+                        .mouvements
+                        .length >
                     0 ||
-                    caisse.transfertsEntrants.length >
+                    caisse
+                        .transfertsEntrants
+                        .length >
                     0;
 
                 return {
@@ -137,6 +233,18 @@ export class FinanceService {
                     devise:
                         caisse.devise,
 
+                    institution:
+                        caisse.institution,
+
+                    identifiant:
+                        caisse.identifiant,
+
+                    titulaire:
+                        caisse.titulaire,
+
+                    moyensOperation:
+                        caisse.moyensOperation,
+
                     soldeInitial,
 
                     totalEntrees,
@@ -148,11 +256,6 @@ export class FinanceService {
                     active:
                         caisse.active,
 
-                    /**
-                     * Information utile pour le frontend :
-                     * dès qu'un mouvement existe,
-                     * le solde initial devient immuable.
-                     */
                     hasHistory,
 
                     createdAt:
@@ -166,7 +269,7 @@ export class FinanceService {
     }
 
     // ============================================================
-    // CAISSE DETAIL
+    // DETAIL COMPTE
     // ============================================================
 
     async findCaisse(
@@ -174,8 +277,10 @@ export class FinanceService {
         role: Role,
     ) {
         this.permissions.require(
-            this.permissions.canViewCaisses(role),
-            'Vous n’avez pas les permissions nécessaires pour consulter les caisses.',
+            this.permissions.canViewCaisses(
+                role,
+            ),
+            'Vous n’avez pas les permissions nécessaires pour consulter ce compte.',
         );
 
         const caisse =
@@ -187,7 +292,7 @@ export class FinanceService {
 
         if (!caisse) {
             throw new NotFoundException(
-                'Caisse introuvable.',
+                'Compte introuvable.',
             );
         }
 
@@ -215,32 +320,50 @@ export class FinanceService {
                 include: {
                     user: {
                         select: {
-                            id: true,
-                            name: true,
-                            email: true,
+                            id:
+                                true,
+
+                            name:
+                                true,
+
+                            email:
+                                true,
                         },
                     },
 
                     dossier: {
                         select: {
-                            id: true,
-                            reference: true,
+                            id:
+                                true,
+
+                            reference:
+                                true,
                         },
                     },
 
                     caisse: {
                         select: {
-                            id: true,
-                            nom: true,
-                            type: true,
+                            id:
+                                true,
+
+                            nom:
+                                true,
+
+                            type:
+                                true,
                         },
                     },
 
                     caisseDestination: {
                         select: {
-                            id: true,
-                            nom: true,
-                            type: true,
+                            id:
+                                true,
+
+                            nom:
+                                true,
+
+                            type:
+                                true,
                         },
                     },
                 },
@@ -251,8 +374,11 @@ export class FinanceService {
                 caisse.soldeInitial,
             );
 
-        let totalEntrees = 0;
-        let totalSorties = 0;
+        let totalEntrees =
+            0;
+
+        let totalSorties =
+            0;
 
         for (
             const mouvement
@@ -262,10 +388,6 @@ export class FinanceService {
                 Number(
                     mouvement.montant,
                 );
-
-            // ------------------------------------------------
-            // ENTREE
-            // ------------------------------------------------
 
             if (
                 mouvement.type ===
@@ -277,10 +399,6 @@ export class FinanceService {
                     montant;
             }
 
-            // ------------------------------------------------
-            // SORTIE
-            // ------------------------------------------------
-
             if (
                 mouvement.type ===
                 'SORTIE' &&
@@ -291,10 +409,6 @@ export class FinanceService {
                     montant;
             }
 
-            // ------------------------------------------------
-            // TRANSFERT SORTANT
-            // ------------------------------------------------
-
             if (
                 mouvement.type ===
                 'TRANSFERT' &&
@@ -305,14 +419,11 @@ export class FinanceService {
                     montant;
             }
 
-            // ------------------------------------------------
-            // TRANSFERT ENTRANT
-            // ------------------------------------------------
-
             if (
                 mouvement.type ===
                 'TRANSFERT' &&
-                mouvement.caisseDestinationId ===
+                mouvement
+                    .caisseDestinationId ===
                 id
             ) {
                 totalEntrees +=
@@ -333,6 +444,18 @@ export class FinanceService {
             devise:
                 caisse.devise,
 
+            institution:
+                caisse.institution,
+
+            identifiant:
+                caisse.identifiant,
+
+            titulaire:
+                caisse.titulaire,
+
+            moyensOperation:
+                caisse.moyensOperation,
+
             soldeInitial,
 
             totalEntrees,
@@ -347,10 +470,6 @@ export class FinanceService {
             active:
                 caisse.active,
 
-            /**
-             * Le détail permet lui aussi au frontend
-             * de savoir si le solde initial est verrouillé.
-             */
             hasHistory:
                 mouvements.length >
                 0,
@@ -363,7 +482,9 @@ export class FinanceService {
 
             mouvements:
                 mouvements.map(
-                    (mouvement) => ({
+                    (
+                        mouvement,
+                    ) => ({
                         ...mouvement,
 
                         montant:
@@ -376,7 +497,7 @@ export class FinanceService {
     }
 
     // ============================================================
-    // CREATION CAISSE
+    // CREATION COMPTE
     // ============================================================
 
     async createCaisse(
@@ -385,15 +506,17 @@ export class FinanceService {
         role: Role,
     ) {
         this.permissions.require(
-            this.permissions.canCreateCaisse(role),
-            'Seul le comptable peut créer une caisse.',
+            this.permissions.canCreateCaisse(
+                role,
+            ),
+            'Vous n’avez pas les permissions nécessaires pour créer un compte financier.',
         );
 
         if (
             !dto.nom?.trim()
         ) {
             throw new BadRequestException(
-                'Le nom de la caisse est obligatoire.',
+                'Le nom du compte est obligatoire.',
             );
         }
 
@@ -401,7 +524,7 @@ export class FinanceService {
             !dto.type
         ) {
             throw new BadRequestException(
-                'Le type de caisse est obligatoire.',
+                'Le type de compte est obligatoire.',
             );
         }
 
@@ -420,6 +543,12 @@ export class FinanceService {
                 'Le solde initial ne peut pas être négatif.',
             );
         }
+
+        const moyensOperation =
+            dto.moyensOperation ??
+            this.getDefaultMoyensOperation(
+                dto.type,
+            );
 
         const caisse =
             await this.prisma.caisse.create({
@@ -440,6 +569,23 @@ export class FinanceService {
                         dto.soldeInitial ??
                         0,
 
+                    institution:
+                        this.normalizeOptionalText(
+                            dto.institution,
+                        ),
+
+                    identifiant:
+                        this.normalizeOptionalText(
+                            dto.identifiant,
+                        ),
+
+                    titulaire:
+                        this.normalizeOptionalText(
+                            dto.titulaire,
+                        ),
+
+                    moyensOperation,
+
                     active:
                         dto.active ??
                         true,
@@ -449,6 +595,11 @@ export class FinanceService {
         await this.activityLog.log({
             userId,
 
+            /*
+             * On conserve les anciens identifiants
+             * d'audit pour éviter de casser
+             * l'historique existant.
+             */
             action:
                 'CAISSE_CREEE',
 
@@ -464,6 +615,18 @@ export class FinanceService {
 
                 type:
                     caisse.type,
+
+                institution:
+                    caisse.institution,
+
+                identifiant:
+                    caisse.identifiant,
+
+                titulaire:
+                    caisse.titulaire,
+
+                moyensOperation:
+                    caisse.moyensOperation,
 
                 soldeInitial:
                     Number(
@@ -486,7 +649,7 @@ export class FinanceService {
     }
 
     // ============================================================
-    // MODIFICATION CAISSE
+    // MODIFICATION COMPTE
     // ============================================================
 
     async updateCaisse(
@@ -496,8 +659,10 @@ export class FinanceService {
         role: Role,
     ) {
         this.permissions.require(
-            this.permissions.canUpdateCaisse(role),
-            'Seul le comptable peut modifier une caisse.',
+            this.permissions.canUpdateCaisse(
+                role,
+            ),
+            'Vous n’avez pas les permissions nécessaires pour modifier ce compte.',
         );
 
         const caisse =
@@ -509,13 +674,9 @@ export class FinanceService {
 
         if (!caisse) {
             throw new NotFoundException(
-                'Caisse introuvable.',
+                'Compte introuvable.',
             );
         }
-
-        // ============================================================
-        // VALIDATION DU NOM
-        // ============================================================
 
         if (
             dto.nom !==
@@ -523,13 +684,13 @@ export class FinanceService {
             !dto.nom.trim()
         ) {
             throw new BadRequestException(
-                'Le nom de la caisse ne peut pas être vide.',
+                'Le nom du compte ne peut pas être vide.',
             );
         }
 
-        // ============================================================
-        // VALIDATION SOLDE INITIAL
-        // ============================================================
+        // ========================================================
+        // SOLDE INITIAL
+        // ========================================================
 
         if (
             dto.soldeInitial !==
@@ -564,13 +725,6 @@ export class FinanceService {
                 ) >
                 0.000001;
 
-            /**
-             * On ne fait la requête de comptage que
-             * si la valeur change réellement.
-             *
-             * Cela permet de tolérer un ancien client
-             * qui renverrait accidentellement la même valeur.
-             */
             if (
                 soldeInitialModifie
             ) {
@@ -596,23 +750,15 @@ export class FinanceService {
                     0
                 ) {
                     throw new BadRequestException(
-                        'Le solde initial de cette caisse ne peut plus être modifié car elle possède déjà un historique financier. Toute correction doit être enregistrée comme un mouvement financier afin de préserver la traçabilité.',
+                        'Le solde initial de ce compte ne peut plus être modifié car il possède déjà un historique financier. Toute correction doit être enregistrée comme un mouvement financier.',
                     );
                 }
             }
         }
 
-        // ============================================================
-        // DESACTIVATION DE LA CAISSE
-        // ============================================================
-        //
-        // Une caisse contenant encore de l'argent ne peut pas
-        // être désactivée.
-        //
-        // Le contrôle porte sur le SOLDE APRES MODIFICATION.
-        // Cela évite qu'une requête puisse simultanément changer
-        // le solde initial et désactiver une caisse avec un solde.
-        // ============================================================
+        // ========================================================
+        // DESACTIVATION
+        // ========================================================
 
         if (
             dto.active ===
@@ -656,16 +802,43 @@ export class FinanceService {
                 0.000001
             ) {
                 throw new BadRequestException(
-                    `Impossible de désactiver la caisse "${caisse.nom}". Son solde après modification serait de ${soldeProjete.toLocaleString(
+                    `Impossible de désactiver le compte "${caisse.nom}". Son solde après modification serait de ${soldeProjete.toLocaleString(
                         'fr-FR',
-                    )} FCFA. Veuillez transférer ou sortir le solde restant avant de la désactiver.`,
+                    )} FCFA. Veuillez transférer ou sortir le solde restant avant de le désactiver.`,
                 );
             }
         }
 
-        // ============================================================
-        // MODIFICATION
-        // ============================================================
+        // ========================================================
+        // MOYENS D'OPERATION
+        // ========================================================
+
+        let moyensOperation:
+            MoyenOperationCompte[] |
+            undefined;
+
+        if (
+            dto.moyensOperation !==
+            undefined
+        ) {
+            moyensOperation =
+                dto.moyensOperation;
+        } else if (
+            dto.type !==
+            undefined &&
+            dto.type !==
+            caisse.type
+        ) {
+            /*
+             * Si le type change et que le client
+             * n'envoie aucun moyen, on applique
+             * les valeurs par défaut du nouveau type.
+             */
+            moyensOperation =
+                this.getDefaultMoyensOperation(
+                    dto.type,
+                );
+        }
 
         const updated =
             await this.prisma.caisse.update({
@@ -700,6 +873,35 @@ export class FinanceService {
                             dto.soldeInitial,
                     }),
 
+                    ...(dto.institution !==
+                        undefined && {
+                        institution:
+                            this.normalizeOptionalText(
+                                dto.institution,
+                            ),
+                    }),
+
+                    ...(dto.identifiant !==
+                        undefined && {
+                        identifiant:
+                            this.normalizeOptionalText(
+                                dto.identifiant,
+                            ),
+                    }),
+
+                    ...(dto.titulaire !==
+                        undefined && {
+                        titulaire:
+                            this.normalizeOptionalText(
+                                dto.titulaire,
+                            ),
+                    }),
+
+                    ...(moyensOperation !==
+                        undefined && {
+                        moyensOperation,
+                    }),
+
                     ...(dto.active !==
                         undefined && {
                         active:
@@ -707,10 +909,6 @@ export class FinanceService {
                     }),
                 },
             });
-
-        // ============================================================
-        // HISTORIQUE APRES MODIFICATION
-        // ============================================================
 
         const nombreMouvements =
             await this.prisma.mouvementFinance.count({
@@ -728,10 +926,6 @@ export class FinanceService {
                     ],
                 },
             });
-
-        // ============================================================
-        // JOURNALISATION
-        // ============================================================
 
         await this.activityLog.log({
             userId,
@@ -758,6 +952,18 @@ export class FinanceService {
                 devise:
                     updated.devise,
 
+                institution:
+                    updated.institution,
+
+                identifiant:
+                    updated.identifiant,
+
+                titulaire:
+                    updated.titulaire,
+
+                moyensOperation:
+                    updated.moyensOperation,
+
                 soldeInitial:
                     Number(
                         updated.soldeInitial,
@@ -780,7 +986,7 @@ export class FinanceService {
     }
 
     // ============================================================
-    // SUPPRESSION CAISSE
+    // SUPPRESSION COMPTE
     // ============================================================
 
     async deleteCaisse(
@@ -789,8 +995,10 @@ export class FinanceService {
         role: Role,
     ) {
         this.permissions.require(
-            this.permissions.canDeleteCaisse(role),
-            'Seul le comptable peut supprimer une caisse.',
+            this.permissions.canDeleteCaisse(
+                role,
+            ),
+            'Vous n’avez pas les permissions nécessaires pour supprimer ce compte.',
         );
 
         const caisse =
@@ -802,13 +1010,15 @@ export class FinanceService {
                 include: {
                     mouvements: {
                         select: {
-                            id: true,
+                            id:
+                                true,
                         },
                     },
 
                     transfertsEntrants: {
                         select: {
-                            id: true,
+                            id:
+                                true,
                         },
                     },
                 },
@@ -816,13 +1026,9 @@ export class FinanceService {
 
         if (!caisse) {
             throw new NotFoundException(
-                'Caisse introuvable.',
+                'Compte introuvable.',
             );
         }
-
-        // ============================================================
-        // VERIFICATION DU SOLDE
-        // ============================================================
 
         const caisseDetail =
             await this.findCaisse(
@@ -842,40 +1048,29 @@ export class FinanceService {
             0.000001
         ) {
             throw new BadRequestException(
-                `Impossible de supprimer la caisse "${caisse.nom}". Son solde actuel est de ${soldeActuel.toLocaleString(
+                `Impossible de supprimer le compte "${caisse.nom}". Son solde actuel est de ${soldeActuel.toLocaleString(
                     'fr-FR',
                 )} FCFA. Le solde doit être ramené à zéro avant toute suppression.`,
             );
         }
 
-        // ============================================================
-        // VERIFICATION DE L'HISTORIQUE
-        // ============================================================
-
         if (
             caisse.mouvements.length >
             0 ||
-            caisse.transfertsEntrants.length >
+            caisse.transfertsEntrants
+                .length >
             0
         ) {
             throw new BadRequestException(
-                'Cette caisse possède déjà un historique financier. Elle ne peut pas être supprimée. Désactivez-la plutôt afin de conserver la traçabilité.',
+                'Ce compte possède déjà un historique financier. Il ne peut pas être supprimé. Désactivez-le plutôt afin de conserver la traçabilité.',
             );
         }
-
-        // ============================================================
-        // SUPPRESSION
-        // ============================================================
 
         await this.prisma.caisse.delete({
             where: {
                 id,
             },
         });
-
-        // ============================================================
-        // JOURNALISATION
-        // ============================================================
 
         await this.activityLog.log({
             userId,
@@ -929,15 +1124,14 @@ export class FinanceService {
         },
     ) {
         this.permissions.require(
-            this.permissions.canViewMouvements(role),
+            this.permissions.canViewMouvements(
+                role,
+            ),
             'Vous n’avez pas les permissions nécessaires pour consulter les mouvements financiers.',
         );
 
-        const where: any = {};
-
-        // ------------------------------------------------------------
-        // CAISSE
-        // ------------------------------------------------------------
+        const where:
+            any = {};
 
         if (
             options?.caisseId
@@ -955,10 +1149,6 @@ export class FinanceService {
             ];
         }
 
-        // ------------------------------------------------------------
-        // DOSSIER
-        // ------------------------------------------------------------
-
         if (
             options?.dossierId
         ) {
@@ -966,20 +1156,12 @@ export class FinanceService {
                 options.dossierId;
         }
 
-        // ------------------------------------------------------------
-        // TYPE
-        // ------------------------------------------------------------
-
         if (
             options?.type
         ) {
             where.type =
                 options.type;
         }
-
-        // ------------------------------------------------------------
-        // DATES
-        // ------------------------------------------------------------
 
         if (
             options?.dateDebut ||
@@ -1051,39 +1233,59 @@ export class FinanceService {
                 include: {
                     caisse: {
                         select: {
-                            id: true,
-                            nom: true,
-                            type: true,
+                            id:
+                                true,
+
+                            nom:
+                                true,
+
+                            type:
+                                true,
                         },
                     },
 
                     caisseDestination: {
                         select: {
-                            id: true,
-                            nom: true,
-                            type: true,
+                            id:
+                                true,
+
+                            nom:
+                                true,
+
+                            type:
+                                true,
                         },
                     },
 
                     user: {
                         select: {
-                            id: true,
-                            name: true,
-                            email: true,
+                            id:
+                                true,
+
+                            name:
+                                true,
+
+                            email:
+                                true,
                         },
                     },
 
                     dossier: {
                         select: {
-                            id: true,
-                            reference: true,
+                            id:
+                                true,
+
+                            reference:
+                                true,
                         },
                     },
                 },
             });
 
         return mouvements.map(
-            (mouvement) => ({
+            (
+                mouvement,
+            ) => ({
                 ...mouvement,
 
                 montant:
@@ -1104,29 +1306,119 @@ export class FinanceService {
         role: Role,
     ) {
         this.permissions.require(
-            this.permissions.canCreateMouvement(role),
-            'Seul le comptable peut enregistrer un mouvement financier.',
+            this.permissions.canCreateMouvement(
+                role,
+            ),
+            'Vous n’avez pas les permissions nécessaires pour enregistrer un mouvement financier.',
         );
 
-        // ------------------------------------------------------------
+        // ============================================================
         // MONTANT
-        // ------------------------------------------------------------
+        // ============================================================
 
         if (
             !Number.isFinite(
                 dto.montant,
             ) ||
-            dto.montant <=
-            0
+            dto.montant <= 0
         ) {
             throw new BadRequestException(
                 'Le montant doit être supérieur à zéro.',
             );
         }
 
-        // ------------------------------------------------------------
-        // CAISSE SOURCE
-        // ------------------------------------------------------------
+        // ============================================================
+        // SOURCE
+        // ============================================================
+
+        let sourceMouvement:
+            SourceMouvementFinance;
+
+        /**
+         * Un transfert a toujours TRANSFERT
+         * comme source.
+         *
+         * L'utilisateur n'a donc pas besoin
+         * de sélectionner sa source.
+         */
+        if (
+            dto.type ===
+            'TRANSFERT'
+        ) {
+            sourceMouvement =
+                SourceMouvementFinance.TRANSFERT;
+        } else {
+            /**
+             * Pour toute ENTREE ou SORTIE manuelle,
+             * la source est obligatoire.
+             */
+            if (!dto.source) {
+                throw new BadRequestException(
+                    'La source du mouvement est obligatoire.',
+                );
+            }
+
+            /**
+             * Certaines sources ne doivent jamais
+             * être créées manuellement depuis Finance.
+             *
+             * Elles sont générées par leurs modules
+             * métier afin d'éviter les doubles entrées.
+             */
+            const sourcesAutomatiques:
+                SourceMouvementFinance[] = [
+                    SourceMouvementFinance.PAIEMENT_FACTURE,
+                    SourceMouvementFinance.PROVISION,
+                    SourceMouvementFinance.FRAIS_OUVERTURE_DOSSIER,
+                    SourceMouvementFinance.TRANSFERT,
+                ];
+
+            if (
+                sourcesAutomatiques.includes(
+                    dto.source,
+                )
+            ) {
+                throw new BadRequestException(
+                    'Cette source est générée automatiquement par Velarium et ne peut pas être utilisée pour un mouvement manuel.',
+                );
+            }
+
+            sourceMouvement =
+                dto.source;
+        }
+
+        const sourceLibelle =
+            this.normalizeOptionalText(
+                dto.sourceLibelle,
+            );
+
+        /**
+         * AUTRE signifie que l'utilisateur doit
+         * obligatoirement préciser la vraie source.
+         */
+        if (
+            sourceMouvement ===
+            SourceMouvementFinance.AUTRE &&
+            !sourceLibelle
+        ) {
+            throw new BadRequestException(
+                'Veuillez préciser la source du mouvement.',
+            );
+        }
+
+        const sourceReference =
+            this.normalizeOptionalText(
+                dto.sourceReference,
+            );
+
+        const tiers =
+            this.normalizeOptionalText(
+                dto.tiers,
+            );
+
+        // ============================================================
+        // COMPTE SOURCE
+        // ============================================================
 
         const caisse =
             await this.prisma.caisse.findUnique({
@@ -1138,25 +1430,21 @@ export class FinanceService {
 
         if (!caisse) {
             throw new NotFoundException(
-                'Caisse introuvable.',
+                'Compte source introuvable.',
             );
         }
 
-        if (
-            !caisse.active
-        ) {
+        if (!caisse.active) {
             throw new BadRequestException(
-                'Cette caisse est désactivée.',
+                'Ce compte est désactivé.',
             );
         }
 
-        // ------------------------------------------------------------
+        // ============================================================
         // DOSSIER
-        // ------------------------------------------------------------
+        // ============================================================
 
-        if (
-            dto.dossierId
-        ) {
+        if (dto.dossierId) {
             const dossier =
                 await this.prisma.dossier.findUnique({
                     where: {
@@ -1172,39 +1460,39 @@ export class FinanceService {
             }
         }
 
-        // ------------------------------------------------------------
-        // SOLDE ACTUEL
-        // ------------------------------------------------------------
+        // ============================================================
+        // SOLDE DU COMPTE
+        // ============================================================
 
-        const source =
+        const compteSource =
             await this.findCaisse(
                 dto.caisseId,
                 role,
             );
 
-        // ------------------------------------------------------------
-        // SORTIE
-        // ------------------------------------------------------------
-
+        /**
+         * Une sortie ne peut pas dépasser
+         * le solde disponible.
+         */
         if (
             dto.type ===
             'SORTIE'
         ) {
             if (
                 dto.montant >
-                source.solde
+                compteSource.solde
             ) {
                 throw new BadRequestException(
-                    `Solde insuffisant dans la caisse "${caisse.nom}". Solde disponible : ${source.solde.toLocaleString(
+                    `Solde insuffisant dans le compte "${caisse.nom}". Solde disponible : ${compteSource.solde.toLocaleString(
                         'fr-FR',
                     )} FCFA.`,
                 );
             }
         }
 
-        // ------------------------------------------------------------
+        // ============================================================
         // TRANSFERT
-        // ------------------------------------------------------------
+        // ============================================================
 
         if (
             dto.type ===
@@ -1214,7 +1502,7 @@ export class FinanceService {
                 !dto.caisseDestinationId
             ) {
                 throw new BadRequestException(
-                    'Une caisse destination est obligatoire pour un transfert.',
+                    'Un compte destination est obligatoire pour un transfert.',
                 );
             }
 
@@ -1223,7 +1511,7 @@ export class FinanceService {
                 dto.caisseId
             ) {
                 throw new BadRequestException(
-                    'La caisse source et la caisse destination doivent être différentes.',
+                    'Le compte source et le compte destination doivent être différents.',
                 );
             }
 
@@ -1237,7 +1525,7 @@ export class FinanceService {
 
             if (!destination) {
                 throw new NotFoundException(
-                    'Caisse destination introuvable.',
+                    'Compte destination introuvable.',
                 );
             }
 
@@ -1245,25 +1533,25 @@ export class FinanceService {
                 !destination.active
             ) {
                 throw new BadRequestException(
-                    'La caisse destination est désactivée.',
+                    'Le compte destination est désactivé.',
                 );
             }
 
             if (
                 dto.montant >
-                source.solde
+                compteSource.solde
             ) {
                 throw new BadRequestException(
-                    `Solde insuffisant dans la caisse "${caisse.nom}". Solde disponible : ${source.solde.toLocaleString(
+                    `Solde insuffisant dans le compte "${caisse.nom}". Solde disponible : ${compteSource.solde.toLocaleString(
                         'fr-FR',
                     )} FCFA.`,
                 );
             }
         }
 
-        // ------------------------------------------------------------
+        // ============================================================
         // DATE
-        // ------------------------------------------------------------
+        // ============================================================
 
         const date =
             dto.date
@@ -1282,9 +1570,9 @@ export class FinanceService {
             );
         }
 
-        // ------------------------------------------------------------
+        // ============================================================
         // CREATION
-        // ------------------------------------------------------------
+        // ============================================================
 
         const mouvement =
             await this.prisma.mouvementFinance.create({
@@ -1298,19 +1586,31 @@ export class FinanceService {
                     categorie:
                         dto.categorie,
 
+                    source:
+                        sourceMouvement,
+
+                    sourceLibelle,
+
+                    sourceReference,
+
+                    tiers,
+
                     description:
-                        dto.description ??
-                        null,
+                        this.normalizeOptionalText(
+                            dto.description,
+                        ),
 
                     date,
 
                     reference:
-                        dto.reference ??
-                        null,
+                        this.normalizeOptionalText(
+                            dto.reference,
+                        ),
 
                     pieceJointe:
-                        dto.pieceJointe ??
-                        null,
+                        this.normalizeOptionalText(
+                            dto.pieceJointe,
+                        ),
 
                     caisseId:
                         dto.caisseId,
@@ -1331,40 +1631,58 @@ export class FinanceService {
                 include: {
                     caisse: {
                         select: {
-                            id: true,
-                            nom: true,
-                            type: true,
+                            id:
+                                true,
+
+                            nom:
+                                true,
+
+                            type:
+                                true,
                         },
                     },
 
                     caisseDestination: {
                         select: {
-                            id: true,
-                            nom: true,
-                            type: true,
+                            id:
+                                true,
+
+                            nom:
+                                true,
+
+                            type:
+                                true,
                         },
                     },
 
                     user: {
                         select: {
-                            id: true,
-                            name: true,
-                            email: true,
+                            id:
+                                true,
+
+                            name:
+                                true,
+
+                            email:
+                                true,
                         },
                     },
 
                     dossier: {
                         select: {
-                            id: true,
-                            reference: true,
+                            id:
+                                true,
+
+                            reference:
+                                true,
                         },
                     },
                 },
             });
 
-        // ------------------------------------------------------------
-        // JOURNALISATION
-        // ------------------------------------------------------------
+        // ============================================================
+        // AUDIT
+        // ============================================================
 
         await this.activityLog.log({
             userId,
@@ -1394,11 +1712,24 @@ export class FinanceService {
                 categorie:
                     mouvement.categorie,
 
+                source:
+                    mouvement.source,
+
+                sourceLibelle:
+                    mouvement.sourceLibelle,
+
+                sourceReference:
+                    mouvement.sourceReference,
+
+                tiers:
+                    mouvement.tiers,
+
                 caisseId:
                     mouvement.caisseId,
 
                 caisseDestinationId:
-                    mouvement.caisseDestinationId,
+                    mouvement
+                        .caisseDestinationId,
             },
         });
 
@@ -1413,14 +1744,16 @@ export class FinanceService {
     }
 
     // ============================================================
-    // DASHBOARD FINANCIER
+    // DASHBOARD
     // ============================================================
 
     async getDashboard(
         role: Role,
     ) {
         this.permissions.require(
-            this.permissions.canViewFinance(role),
+            this.permissions.canViewFinance(
+                role,
+            ),
             'Vous n’avez pas les permissions nécessaires pour consulter le dashboard financier.',
         );
 
@@ -1439,39 +1772,60 @@ export class FinanceService {
                 include: {
                     caisse: {
                         select: {
-                            id: true,
-                            nom: true,
-                            type: true,
+                            id:
+                                true,
+
+                            nom:
+                                true,
+
+                            type:
+                                true,
                         },
                     },
 
                     caisseDestination: {
                         select: {
-                            id: true,
-                            nom: true,
-                            type: true,
+                            id:
+                                true,
+
+                            nom:
+                                true,
+
+                            type:
+                                true,
                         },
                     },
 
                     user: {
                         select: {
-                            id: true,
-                            name: true,
-                            email: true,
+                            id:
+                                true,
+
+                            name:
+                                true,
+
+                            email:
+                                true,
                         },
                     },
 
                     dossier: {
                         select: {
-                            id: true,
-                            reference: true,
+                            id:
+                                true,
+
+                            reference:
+                                true,
                         },
                     },
                 },
             });
 
-        let totalEntrees = 0;
-        let totalSorties = 0;
+        let totalEntrees =
+            0;
+
+        let totalSorties =
+            0;
 
         for (
             const mouvement
@@ -1499,8 +1853,8 @@ export class FinanceService {
             }
 
             /*
-             * Les transferts ne changent pas
-             * le patrimoine financier global.
+             * Les transferts sont volontairement
+             * exclus des totaux globaux.
              */
         }
 
@@ -1527,6 +1881,10 @@ export class FinanceService {
 
             totalSorties,
 
+            /*
+             * On conserve temporairement le nom
+             * pour compatibilité frontend.
+             */
             nombreCaisses:
                 caisses.length,
 

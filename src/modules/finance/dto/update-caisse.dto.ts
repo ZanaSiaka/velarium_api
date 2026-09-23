@@ -1,4 +1,5 @@
 import {
+    IsArray,
     IsBoolean,
     IsEnum,
     IsNumber,
@@ -6,10 +7,18 @@ import {
     IsString,
     Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { TypeCaisse } from '../../../../generated/prisma/client';
+
+import {
+    Type,
+} from 'class-transformer';
+
+import {
+    MoyenOperationCompte,
+    TypeCaisse,
+} from '../../../../generated/prisma/client';
 
 export class UpdateCaisseDto {
+
     @IsOptional()
     @IsString()
     nom?: string;
@@ -27,6 +36,28 @@ export class UpdateCaisseDto {
     @IsNumber()
     @Min(0)
     soldeInitial?: number;
+
+    @IsOptional()
+    @IsString()
+    institution?: string;
+
+    @IsOptional()
+    @IsString()
+    identifiant?: string;
+
+    @IsOptional()
+    @IsString()
+    titulaire?: string;
+
+    @IsOptional()
+    @IsArray()
+    @IsEnum(
+        MoyenOperationCompte,
+        {
+            each: true,
+        },
+    )
+    moyensOperation?: MoyenOperationCompte[];
 
     @IsOptional()
     @IsBoolean()

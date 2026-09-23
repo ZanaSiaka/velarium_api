@@ -1,15 +1,23 @@
 import {
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
-}
-  from 'class-validator'
+  Min,
+  ValidateIf,
+} from 'class-validator';
 
-import { DossierStatut } from '../../../../generated/prisma/client'
+import { Type } from 'class-transformer';
+
+import {
+  DossierStatut,
+  MoyenOperationCompte,
+} from '../../../../generated/prisma/client';
 
 export class CreateDossierDto {
   // ============================================================
@@ -18,14 +26,14 @@ export class CreateDossierDto {
 
   @IsNotEmpty()
   @IsString()
-  natureAffaire: string
+  natureAffaire: string;
 
   @IsNotEmpty()
   @IsString()
-  typeDossier: string
+  typeDossier: string;
 
   @IsEnum(DossierStatut)
-  statut: DossierStatut
+  statut: DossierStatut;
 
   // ============================================================
   // CLIENT
@@ -33,7 +41,7 @@ export class CreateDossierDto {
 
   @IsNotEmpty()
   @IsString()
-  clientId: string
+  clientId: string;
 
   // ============================================================
   // AVOCAT RESPONSABLE
@@ -41,7 +49,7 @@ export class CreateDossierDto {
 
   @IsNotEmpty()
   @IsString()
-  avocatResponsableId: string
+  avocatResponsableId: string;
 
   // ============================================================
   // AVOCAT DU CLIENT
@@ -49,24 +57,26 @@ export class CreateDossierDto {
 
   @IsOptional()
   @IsString()
-  avocatClientNom?: string
+  avocatClientNom?: string;
 
   @IsOptional()
   @IsEmail()
-  avocatClientEmail?: string
+  avocatClientEmail?: string;
 
   @IsOptional()
   @IsString()
-  avocatClientTelephone?: string
+  avocatClientTelephone?: string;
 
   // ============================================================
   // COLLABORATEURS
   // ============================================================
 
-  @IsArray()
-  @IsString({ each: true })
   @IsOptional()
-  collaborateurIds?: string[]
+  @IsArray()
+  @IsString({
+    each: true,
+  })
+  collaborateurIds?: string[];
 
   // ============================================================
   // INFORMATIONS JURIDIQUES
@@ -74,20 +84,88 @@ export class CreateDossierDto {
 
   @IsOptional()
   @IsString()
-  juridiction?: string
+  juridiction?: string;
 
   @IsOptional()
   @IsString()
-  partieAdverse?: string
+  partieAdverse?: string;
 
   // ============================================================
   // KYC
   // ============================================================
 
   @IsBoolean()
-  kycSoupcon: boolean
+  kycSoupcon: boolean;
 
   @IsOptional()
   @IsString()
-  declarationSoupcon?: string
+  declarationSoupcon?: string;
+
+  // ============================================================
+  // FRAIS D'OUVERTURE
+  // ============================================================
+
+  /**
+   * Montant final réellement dû.
+   *
+   * Exemple :
+   * 100000 = exactement 100 000 FCFA.
+   *
+   * Aucune TVA n'est ajoutée.
+   */
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  montantFraisOuverture: number;
+
+  /**
+   * true :
+   * le montant a réellement été encaissé.
+   *
+   * false :
+   * le montant reste à payer.
+   */
+  @IsBoolean()
+  fraisOuvertureRegles: boolean;
+
+  // ============================================================
+  // COMPTE D'ENCAISSEMENT
+  // Obligatoire uniquement si les frais sont payés
+  // ============================================================
+
+  @ValidateIf(
+    (dto: CreateDossierDto) =>
+      dto.fraisOuvertureRegles === true,
+  )
+  @IsNotEmpty()
+  @IsString()
+  caisseIdFraisOuverture?: string;
+
+  // ============================================================
+  // MOYEN DE PAIEMENT
+  // ============================================================
+
+  @ValidateIf(
+    (dto: CreateDossierDto) =>
+      dto.fraisOuvertureRegles === true,
+  )
+  @IsNotEmpty()
+  @IsEnum(MoyenOperationCompte)
+  moyenPaiementFraisOuverture?: MoyenOperationCompte;
+
+  // ============================================================
+  // REFERENCE PAIEMENT
+  // ============================================================
+
+  @IsOptional()
+  @IsString()
+  referencePaiementFraisOuverture?: string;
+
+  // ============================================================
+  // DATE DU PAIEMENT
+  // ============================================================
+
+  @IsOptional()
+  @IsDateString()
+  datePaiementFraisOuverture?: string;
 }

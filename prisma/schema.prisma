@@ -8,17 +8,18 @@ datasource db {
 }
 
 model User {
-  id                    String                 @id @default(cuid())
-  name                  String
-  email                 String                 @unique
-  passwordHash          String
-  role                  Role                   @default(COLLABORATEUR)
-  image                 String?
-  twoFactorEnabled      Boolean                @default(false)
-  twoFactorSecret       String?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  active                Boolean                @default(true)
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  passwordHash     String
+  role             Role     @default(COLLABORATEUR_ASSOCIE)
+  image            String?
+  twoFactorEnabled Boolean  @default(false)
+  twoFactorSecret  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  active           Boolean  @default(true)
+
   activityLogs          ActivityLog[]
   documentsDeposes      Document[]             @relation("DocumentUploadedBy")
   documentConsultations DocumentConsultation[]
@@ -31,6 +32,10 @@ model User {
   pieces                PieceUtilisateur[]     @relation("UserPieces")
   mouvementsFinance     MouvementFinance[]
   piecesJointesFinance  PieceJointeFinance[]   @relation("FinancePieceUploadedBy")
+
+  recusEncaissementCrees RecuEncaissement[] @relation("RecuCreatedBy")
+
+  imputationsProvisionCreees ImputationProvision[] @relation("ImputationProvisionCreatedBy")
 }
 
 model ContratUtilisateur {
@@ -135,6 +140,33 @@ model Dossier {
   provisions            Provision[]
   taches                Tache[]
   mouvementsFinance     MouvementFinance[]
+  fraisOuverture        FraisOuvertureDossier?
+  recusEncaissement     RecuEncaissement[]
+}
+
+model FraisOuvertureDossier {
+  id        String @id @default(cuid())
+  dossierId String @unique
+
+  montant Decimal @db.Decimal(14, 2)
+
+  statut StatutFraisOuverture @default(A_PAYER)
+
+  datePaiement DateTime?
+
+  mouvementFinanceId String?           @unique
+  mouvementFinance   MouvementFinance? @relation("FraisOuvertureMouvementFinance", fields: [mouvementFinanceId], references: [id], onDelete: SetNull)
+
+  factureId String?  @unique
+  facture   Facture? @relation("FraisOuvertureFacture", fields: [factureId], references: [id], onDelete: SetNull)
+
+  dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statut])
+  @@index([datePaiement])
 }
 
 model DossierCollaborateur {
@@ -177,66 +209,149 @@ model ConventionHonoraires {
 }
 
 model Facture {
-  id           String        @id @default(cuid())
-  numero       String        @unique
-  statut       FactureStatut @default(BROUILLON)
-  dossierId    String
-  clientId     String
-  dateEmission DateTime      @default(now())
-  dateEcheance DateTime
-  montantHT    Decimal       @db.Decimal(14, 2)
-  tauxTVA      Decimal       @default(18) @db.Decimal(5, 2)
-  montantTVA   Decimal       @db.Decimal(14, 2)
-  montantTTC   Decimal       @db.Decimal(14, 2)
-  mentionRCCM  String?
-  mentionNCC   String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id     String @id @default(cuid())
+  numero String @unique
 
-  client     Client         @relation(fields: [clientId], references: [id])
-  dossier    Dossier        @relation(fields: [dossierId], references: [id])
+  statut FactureStatut @default(BROUILLON)
+
+  dossierId String
+  clientId  String
+
+  // Source obligatoire de la facture.
+  // Toutes les anciennes factures étant déjà liées à un dossier,
+  // DOSSIER est un défaut cohérent.
+  source SourceFacture @default(DOSSIER)
+
+  // Utilisé principalement lorsque source = AUTRE
+  sourceLibelle String?
+
+  dateEmission DateTime @default(now())
+  dateEcheance DateTime
+
+  montantHT  Decimal @db.Decimal(14, 2)
+  tauxTVA    Decimal @default(18) @db.Decimal(5, 2)
+  montantTVA Decimal @db.Decimal(14, 2)
+  montantTTC Decimal @db.Decimal(14, 2)
+
+  mentionRCCM String?
+  mentionNCC  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  dossier Dossier @relation(fields: [dossierId], references: [id])
+
   lignes     LigneFacture[]
   paiements  Paiement[]
   provisions Provision[]
+
+  fraisOuvertureDossier FraisOuvertureDossier? @relation("FraisOuvertureFacture")
+  imputationsProvision  ImputationProvision[]
+
+  @@index([source])
 }
 
 model LigneFacture {
-  id           String  @id @default(cuid())
-  factureId    String
-  description  String
-  quantite     Decimal @default(1) @db.Decimal(10, 2)
+  id        String @id @default(cuid())
+  factureId String
+
+  type TypeLigneFacture @default(AUTRE)
+
+  description String
+
+  quantite Decimal @default(1) @db.Decimal(10, 2)
+
   prixUnitaire Decimal @db.Decimal(14, 2)
-  montant      Decimal @db.Decimal(14, 2)
-  facture      Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  montant Decimal @db.Decimal(14, 2)
+
+  facture Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  @@index([type])
 }
 
 model Paiement {
-  id            String   @id @default(cuid())
-  factureId     String
-  montant       Decimal  @db.Decimal(14, 2)
-  datePaiement  DateTime @default(now())
+  id        String @id @default(cuid())
+  factureId String
+
+  montant Decimal @db.Decimal(14, 2)
+
+  datePaiement DateTime @default(now())
+
   moyenPaiement String?
   note          String?
-  createdAt     DateTime @default(now())
-  facture       Facture  @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  // Un paiement réel correspond à un seul mouvement Finance
+  mouvementFinanceId String? @unique
+
+  createdAt DateTime @default(now())
+
+  facture Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  mouvementFinance MouvementFinance? @relation("PaiementMouvementFinance", fields: [mouvementFinanceId], references: [id], onDelete: SetNull)
+
+  @@index([factureId])
 }
 
 model Provision {
-  id            String   @id @default(cuid())
-  dossierId     String
-  factureId     String?
-  montant       Decimal  @db.Decimal(14, 2)
-  datePaiement  DateTime @default(now())
-  moyenPaiement String?
-  note          String?
-  createdAt     DateTime @default(now())
+  id String @id @default(cuid())
 
-  dossier Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+  dossierId String
+
+  montant Decimal @db.Decimal(14, 2)
+
+  datePaiement DateTime @default(now())
+
+  moyenPaiement String?
+
+  note String?
+
+  mouvementFinanceId String? @unique
+
+  createdAt DateTime @default(now())
+
+  dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  mouvementFinance MouvementFinance? @relation("ProvisionMouvementFinance", fields: [mouvementFinanceId], references: [id], onDelete: SetNull)
+
+  imputations ImputationProvision[]
+
+  factureId String?
+
   facture Facture? @relation(fields: [factureId], references: [id], onDelete: SetNull)
 
   @@index([dossierId])
   @@index([factureId])
   @@index([datePaiement])
+}
+
+model ImputationProvision {
+  id String @id @default(cuid())
+
+  provisionId String
+
+  factureId String
+
+  montant Decimal @db.Decimal(14, 2)
+
+  dateImputation DateTime @default(now())
+
+  createdById String
+
+  provision Provision @relation(fields: [provisionId], references: [id], onDelete: Cascade)
+
+  facture Facture @relation(fields: [factureId], references: [id], onDelete: Cascade)
+
+  createdBy User @relation("ImputationProvisionCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([provisionId, factureId])
+  @@index([provisionId])
+  @@index([factureId])
+  @@index([createdById])
 }
 
 model Document {
@@ -308,6 +423,14 @@ model Caisse {
 
   soldeInitial Decimal @default(0) @db.Decimal(15, 2)
 
+  // Informations du compte
+  institution String?
+  identifiant String?
+  titulaire   String?
+
+  // Moyens utilisables sur ce compte
+  moyensOperation MoyenOperationCompte[] @default([])
+
   active Boolean @default(true)
 
   createdAt DateTime @default(now())
@@ -318,44 +441,117 @@ model Caisse {
 }
 
 model MouvementFinance {
-  id      String               @id @default(cuid())
-  type    TypeMouvementFinance
-  montant Decimal              @db.Decimal(15, 2)
+  id String @id @default(cuid())
+
+  type TypeMouvementFinance
+
+  montant Decimal @db.Decimal(15, 2)
 
   description String?
-  categorie   CategorieFinance
-  date        DateTime         @default(now())
-  reference   String?
+
+  categorie CategorieFinance
+
+  source SourceMouvementFinance
+
+  sourceLibelle String?
+
+  sourceReference String?
+
+  tiers String?
+
+  date DateTime @default(now())
+
+  reference String?
+
   pieceJointe String?
 
-  // Caisse concernée
   caisseId String
-  caisse   Caisse @relation("CaisseMouvements", fields: [caisseId], references: [id])
 
-  // Utilisé uniquement pour les transferts
+  caisse Caisse @relation("CaisseMouvements", fields: [caisseId], references: [id])
+
+  moyenPaiement MoyenOperationCompte?
+
   caisseDestinationId String?
-  caisseDestination   Caisse? @relation("CaisseDestination", fields: [caisseDestinationId], references: [id])
 
-  // Utilisateur ayant enregistré l'opération
+  caisseDestination Caisse? @relation("CaisseDestination", fields: [caisseDestinationId], references: [id])
+
   userId String
-  user   User   @relation(fields: [userId], references: [id])
 
-  // Peut être rattaché à un dossier
+  user User @relation(fields: [userId], references: [id])
+
   dossierId String?
-  dossier   Dossier? @relation(fields: [dossierId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  dossier Dossier? @relation(fields: [dossierId], references: [id])
+
+  paiement Paiement? @relation("PaiementMouvementFinance")
+
+  provision Provision? @relation("ProvisionMouvementFinance")
+
+  fraisOuvertureDossier FraisOuvertureDossier? @relation("FraisOuvertureMouvementFinance")
+
+  recuEncaissement RecuEncaissement? @relation("RecuMouvementFinance")
 
   piecesJointes PieceJointeFinance[]
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
 
   @@index([caisseId])
   @@index([caisseDestinationId])
   @@index([userId])
   @@index([type])
   @@index([categorie])
+  @@index([source])
+  @@index([sourceReference])
   @@index([date])
   @@index([dossierId])
+  @@index([moyenPaiement])
+}
+
+model RecuEncaissement {
+  id String @id @default(cuid())
+
+  numero String @unique
+
+  type TypeRecuEncaissement
+
+  montant Decimal @db.Decimal(14, 2)
+
+  dateEmission DateTime @default(now())
+
+  recuDe String
+
+  compteLibelle String
+
+  moyenPaiement MoyenOperationCompte
+
+  referencePaiement String?
+
+  objet String
+
+  note String?
+
+  dossierId String
+
+  dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  mouvementFinanceId String @unique
+
+  mouvementFinance MouvementFinance @relation("RecuMouvementFinance", fields: [mouvementFinanceId], references: [id], onDelete: Cascade)
+
+  createdById String
+
+  createdBy User @relation("RecuCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([dossierId])
+  @@index([type])
+  @@index([dateEmission])
+  @@index([createdById])
 }
 
 model PieceJointeFinance {
@@ -380,7 +576,10 @@ model PieceJointeFinance {
 
 enum Role {
   AVOCAT
-  COLLABORATEUR
+  COLLABORATEUR_ASSOCIE
+  AVOCAT_STAGIAIRE
+  JURISTE
+  ARCHIVISTE
   SECRETARIAT
   COMPTABLE
 }
@@ -453,10 +652,31 @@ enum TypePieceUtilisateur {
 }
 
 enum TypeCaisse {
+  BANCAIRE
+  EPARGNE
+  CARTE_BANCAIRE
+  MOBILE_MONEY
   ESPECES
-  BANQUE
-  WAVE
   AUTRE
+}
+
+enum MoyenOperationCompte {
+  VIREMENT
+  CHEQUE
+
+  ORANGE_MONEY
+  WAVE
+  MTN_MONEY
+  MOOV_MONEY
+
+  PAIEMENT_CARTE
+
+  ESPECES
+
+  // TEMPORAIRE : anciennes valeurs
+  // On les supprimera après migration des données existantes.
+  CARTE
+  MOBILE_MONEY
 }
 
 enum TypeMouvementFinance {
@@ -465,8 +685,43 @@ enum TypeMouvementFinance {
   TRANSFERT
 }
 
+enum StatutFraisOuverture {
+  A_PAYER
+  PAYE
+
+  // TEMPORAIRE
+  A_FACTURER
+  FACTURE
+}
+
+enum SourceFacture {
+  DOSSIER
+  FRAIS_OUVERTURE_DOSSIER
+  AUTRE
+}
+
+enum SourceMouvementFinance {
+  PAIEMENT_FACTURE
+  FRAIS_OUVERTURE_DOSSIER
+  PROVISION
+  TRANSFERT
+  ACHAT
+  LOYER
+  SALAIRE
+  REMBOURSEMENT
+  IMPOT_TAXE
+  AUTRE
+}
+
+enum TypeLigneFacture {
+  HONORAIRES
+  FRAIS_OUVERTURE_DOSSIER
+  AUTRE
+}
+
 enum CategorieFinance {
   HONORAIRES
+  FRAIS_OUVERTURE_DOSSIER
   PAIEMENT_FACTURE
   PROVISION
   REMBOURSEMENT
@@ -482,4 +737,9 @@ enum CategorieFinance {
   FRAIS_BANCAIRES
   IMPOTS_TAXES
   AUTRE
+}
+
+enum TypeRecuEncaissement {
+  FRAIS_OUVERTURE_DOSSIER
+  PROVISION
 }

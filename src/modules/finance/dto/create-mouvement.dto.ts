@@ -6,9 +6,12 @@ import {
     IsString,
     Min,
 } from 'class-validator';
+
 import { Type } from 'class-transformer';
+
 import {
     CategorieFinance,
+    SourceMouvementFinance,
     TypeMouvementFinance,
 } from '../../../../generated/prisma/client';
 
@@ -31,6 +34,45 @@ export class CreateMouvementDto {
     @IsString()
     caisseDestinationId?: string;
 
+    /**
+     * Source du mouvement.
+     *
+     * Obligatoire fonctionnellement pour
+     * ENTREE et SORTIE.
+     *
+     * Pour TRANSFERT, le backend impose
+     * automatiquement TRANSFERT.
+     */
+    @IsOptional()
+    @IsEnum(SourceMouvementFinance)
+    source?: SourceMouvementFinance;
+
+    /**
+     * Description libre de la source.
+     *
+     * Obligatoire lorsque source = AUTRE.
+     */
+    @IsOptional()
+    @IsString()
+    sourceLibelle?: string;
+
+    /**
+     * Référence de la source :
+     * reçu, facture fournisseur,
+     * référence bancaire, etc.
+     */
+    @IsOptional()
+    @IsString()
+    sourceReference?: string;
+
+    /**
+     * Client, fournisseur, bailleur,
+     * bénéficiaire, payeur...
+     */
+    @IsOptional()
+    @IsString()
+    tiers?: string;
+
     @IsOptional()
     @IsString()
     description?: string;
@@ -39,6 +81,10 @@ export class CreateMouvementDto {
     @IsDateString()
     date?: string;
 
+    /**
+     * Référence interne historique
+     * du mouvement.
+     */
     @IsOptional()
     @IsString()
     reference?: string;

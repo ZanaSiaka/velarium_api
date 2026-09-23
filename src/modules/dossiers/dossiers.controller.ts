@@ -52,6 +52,11 @@ export class DossiersController {
   getLivrePaiements(@Param('id') id: string) {
     return this.dossiersService.getLivrePaiements(id)
   }
+  @Get('frais-ouverture')
+  findFraisOuverture() {
+    return this.dossiersService
+      .findFraisOuverture();
+  }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
