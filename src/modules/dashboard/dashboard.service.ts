@@ -3,22 +3,21 @@ import {
   Injectable,
 } from '@nestjs/common'
 
-import { PrismaService } from '../../prisma/prisma.service'
+import {
+  FactureStatut,
+  TypeMouvementFinance,
+} from '../../../generated/prisma/client'
+
+import {
+  PrismaService,
+} from '../../prisma/prisma.service'
 
 const MOIS_LABELS = [
-  'Jan',
-  'Fév',
-  'Mar',
-  'Avr',
-  'Mai',
-  'Juin',
-  'Juil',
-  'Août',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Déc',
+  'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
+  'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc',
 ]
+
+const num = (value: unknown): number => Number(value ?? 0)
 
 @Injectable()
 export class DashboardService {
@@ -32,29 +31,25 @@ export class DashboardService {
   ) {
     const now = new Date()
 
-    // ============================================================
-    // PÉRIODE DU DASHBOARD
-    // ============================================================
-
     const startDate = startDateParam
-      ? new Date(`${startDateParam}T00:00:00.000`)
+      ? new Date(`${startDateParam}T00:00:00.000Z`)
       : new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        1,
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          1,
+        ),
       )
 
     const endDate = endDateParam
-      ? new Date(`${endDateParam}T23:59:59.999`)
+      ? new Date(`${endDateParam}T23:59:59.999Z`)
       : now
 
     if (
       Number.isNaN(startDate.getTime()) ||
       Number.isNaN(endDate.getTime())
     ) {
-      throw new BadRequestException(
-        'Dates invalides.',
-      )
+      throw new BadRequestException('Dates invalides.')
     }
 
     if (startDate > endDate) {
@@ -63,48 +58,34 @@ export class DashboardService {
       )
     }
 
-    // ============================================================
-    // AUTRES DATES DU DASHBOARD
-    // ============================================================
-
     const in7Days = new Date(
-      now.getTime() +
-      7 * 24 * 60 * 60 * 1000,
-    )
-
-    const startOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1,
+      now.getTime() + 7 * 24 * 60 * 60 * 1000,
     )
 
     const sixMonthsAgo = new Date(
-      now.getFullYear(),
-      now.getMonth() - 5,
-      1,
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth() - 5,
+        1,
+      ),
     )
-
-    // ============================================================
-    // REQUÊTES
-    // ============================================================
 
     const [
       clientsTotal,
       clientsActifs,
       dossiersActifs,
       echeancesSemaine,
-      paiementsDuMois,
+      mouvementsEntreePeriode,
+      mouvementsSortiePeriode,
+      paiementsLegacyPeriode,
+      provisionsLegacyPeriode,
+      caisses,
       facturesImpayees,
-      paiements6Mois,
+      mouvementsEntree6Mois,
+      paiementsLegacy6Mois,
+      provisionsLegacy6Mois,
       derniersPaiements,
     ] = await Promise.all([
-
-      // ==========================================================
-      // NOMBRE DE CLIENTS
-      //
-      // Clients créés pendant la période sélectionnée.
-      // ==========================================================
-
       this.prisma.client.count({
         where: {
           createdAt: {
@@ -114,20 +95,12 @@ export class DashboardService {
         },
       }),
 
-      // ==========================================================
-      // CLIENTS ACTIFS
-      //
-      // Parmi les clients créés pendant la période,
-      // on compte ceux qui ont au moins un dossier EN_COURS.
-      // ==========================================================
-
       this.prisma.client.count({
         where: {
           createdAt: {
             gte: startDate,
             lte: endDate,
           },
-
           dossiers: {
             some: {
               statut: 'EN_COURS',
@@ -136,21 +109,11 @@ export class DashboardService {
         },
       }),
 
-      // ==========================================================
-      // DOSSIERS ACTIFS
-      //
-      // KPI existant du dashboard.
-      // ==========================================================
-
       this.prisma.dossier.count({
         where: {
           statut: 'EN_COURS',
         },
       }),
-
-      // ==========================================================
-      // ÉCHÉANCES DES 7 PROCHAINS JOURS
-      // ==========================================================
 
       this.prisma.evenement.count({
         where: {
@@ -161,14 +124,12 @@ export class DashboardService {
         },
       }),
 
-      // ==========================================================
-      // PAIEMENTS DU MOIS
-      // ==========================================================
-
-      this.prisma.paiement.findMany({
+      this.prisma.mouvementFinance.findMany({
         where: {
-          datePaiement: {
-            gte: startOfMonth,
+          type: TypeMouvementFinance.ENTREE,
+          date: {
+            gte: startDate,
+            lte: endDate,
           },
         },
         select: {
@@ -176,33 +137,25 @@ export class DashboardService {
         },
       }),
 
-      // ==========================================================
-      // FACTURES IMPAYÉES
-      // ==========================================================
-
-      this.prisma.facture.findMany({
+      this.prisma.mouvementFinance.findMany({
         where: {
-          statut: {
-            in: [
-              'ENVOYEE',
-              'PARTIELLEMENT_PAYEE',
-              'EN_RETARD',
-            ],
+          type: TypeMouvementFinance.SORTIE,
+          date: {
+            gte: startDate,
+            lte: endDate,
           },
         },
-        include: {
-          paiements: true,
+        select: {
+          montant: true,
         },
       }),
 
-      // ==========================================================
-      // PAIEMENTS DES 6 DERNIERS MOIS
-      // ==========================================================
-
       this.prisma.paiement.findMany({
         where: {
+          mouvementFinanceId: null,
           datePaiement: {
-            gte: sixMonthsAgo,
+            gte: startDate,
+            lte: endDate,
           },
         },
         select: {
@@ -211,9 +164,101 @@ export class DashboardService {
         },
       }),
 
-      // ==========================================================
-      // DERNIERS PAIEMENTS
-      // ==========================================================
+      this.prisma.provision.findMany({
+        where: {
+          mouvementFinanceId: null,
+          datePaiement: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        select: {
+          montant: true,
+          datePaiement: true,
+        },
+      }),
+
+      this.prisma.caisse.findMany({
+        orderBy: {
+          createdAt: 'asc',
+        },
+        include: {
+          mouvements: true,
+          transfertsEntrants: true,
+        },
+      }),
+
+      this.prisma.facture.findMany({
+        where: {
+          statut: {
+            in: [
+              FactureStatut.ENVOYEE,
+              FactureStatut.PARTIELLEMENT_PAYEE,
+              FactureStatut.EN_RETARD,
+            ],
+          },
+        },
+        select: {
+          montantTTC: true,
+          paiements: {
+            select: {
+              montant: true,
+            },
+          },
+          imputationsProvision: {
+            select: {
+              montant: true,
+            },
+          },
+          provisions: {
+            select: {
+              montant: true,
+            },
+          },
+        },
+      }),
+
+      this.prisma.mouvementFinance.findMany({
+        where: {
+          type: TypeMouvementFinance.ENTREE,
+          date: {
+            gte: sixMonthsAgo,
+            lte: now,
+          },
+        },
+        select: {
+          montant: true,
+          date: true,
+        },
+      }),
+
+      this.prisma.paiement.findMany({
+        where: {
+          mouvementFinanceId: null,
+          datePaiement: {
+            gte: sixMonthsAgo,
+            lte: now,
+          },
+        },
+        select: {
+          montant: true,
+          datePaiement: true,
+        },
+      }),
+
+      this.prisma.provision.findMany({
+        where: {
+          mouvementFinanceId: null,
+          datePaiement: {
+            gte: sixMonthsAgo,
+            lte: now,
+          },
+        },
+        select: {
+          montant: true,
+          datePaiement: true,
+        },
+      }),
 
       this.prisma.paiement.findMany({
         orderBy: {
@@ -230,161 +275,256 @@ export class DashboardService {
       }),
     ])
 
-    // ============================================================
-    // CLIENTS NON ACTIFS
-    // ============================================================
-
     const clientsInactifs =
       clientsTotal - clientsActifs
 
-    // ============================================================
-    // HONORAIRES ENCAISSÉS DU MOIS
-    // ============================================================
-
-    const honorairesEncaissesMois =
-      paiementsDuMois.reduce(
-        (sum, p) =>
-          sum + Number(p.montant),
+    const totalEntreesModernes =
+      mouvementsEntreePeriode.reduce(
+        (total, mouvement) =>
+          total + num(mouvement.montant),
         0,
       )
 
-    // ============================================================
-    // IMPAYÉS
-    // ============================================================
+    const totalPaiementsLegacy =
+      paiementsLegacyPeriode.reduce(
+        (total, paiement) =>
+          total + num(paiement.montant),
+        0,
+      )
+
+    const totalProvisionsLegacy =
+      provisionsLegacyPeriode.reduce(
+        (total, provision) =>
+          total + num(provision.montant),
+        0,
+      )
+
+    const totalEntrees =
+      totalEntreesModernes +
+      totalPaiementsLegacy +
+      totalProvisionsLegacy
+
+    const totalSorties =
+      mouvementsSortiePeriode.reduce(
+        (total, mouvement) =>
+          total + num(mouvement.montant),
+        0,
+      )
+
+    const detailComptes = caisses.map((caisse) => {
+      const soldeInitial = num(caisse.soldeInitial)
+
+      let entrees = 0
+      let sorties = 0
+
+      for (const mouvement of caisse.mouvements) {
+        const montant = num(mouvement.montant)
+
+        if (mouvement.type === TypeMouvementFinance.ENTREE) {
+          entrees += montant
+        }
+
+        if (mouvement.type === TypeMouvementFinance.SORTIE) {
+          sorties += montant
+        }
+
+        if (mouvement.type === TypeMouvementFinance.TRANSFERT) {
+          sorties += montant
+        }
+      }
+
+      for (const transfert of caisse.transfertsEntrants) {
+        if (transfert.type === TypeMouvementFinance.TRANSFERT) {
+          entrees += num(transfert.montant)
+        }
+      }
+
+      return {
+        id: caisse.id,
+        solde:
+          soldeInitial +
+          entrees -
+          sorties,
+      }
+    })
+
+    const soldeGlobal =
+      detailComptes.reduce(
+        (total, compte) =>
+          total + compte.solde,
+        0,
+      )
 
     const impayes =
       facturesImpayees.reduce(
-        (sum, facture) => {
-          const paye =
+        (totalGlobal, facture) => {
+          const totalPaiements =
             facture.paiements.reduce(
               (total, paiement) =>
-                total + Number(paiement.montant),
+                total + num(paiement.montant),
               0,
             )
 
-          return (
-            sum +
-            (
-              Number(facture.montantTTC) -
-              paye
+          const totalImputations =
+            facture.imputationsProvision.reduce(
+              (total, imputation) =>
+                total + num(imputation.montant),
+              0,
             )
-          )
+
+          const totalLegacyFacture =
+            facture.provisions.reduce(
+              (total, provision) =>
+                total + num(provision.montant),
+              0,
+            )
+
+          const totalRegle =
+            totalPaiements +
+            totalImputations +
+            totalLegacyFacture
+
+          const solde =
+            Math.max(
+              num(facture.montantTTC) -
+              totalRegle,
+              0,
+            )
+
+          return totalGlobal + solde
         },
         0,
       )
 
-    // ============================================================
-    // HONORAIRES PAR MOIS
-    // ============================================================
-
-    const honorairesParMoisMap =
+    const entreesParMoisMap =
       new Map<string, number>()
 
     for (let i = 5; i >= 0; i--) {
       const date = new Date(
-        now.getFullYear(),
-        now.getMonth() - i,
-        1,
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth() - i,
+          1,
+        ),
       )
 
-      honorairesParMoisMap.set(
-        MOIS_LABELS[date.getMonth()],
+      entreesParMoisMap.set(
+        MOIS_LABELS[date.getUTCMonth()],
         0,
       )
     }
 
-    for (const paiement of paiements6Mois) {
+    const addToMonth = (
+      date: Date,
+      montant: number,
+    ) => {
       const label =
         MOIS_LABELS[
-        new Date(
-          paiement.datePaiement,
-        ).getMonth()
+        date.getUTCMonth()
         ]
 
-      if (
-        honorairesParMoisMap.has(label)
-      ) {
-        honorairesParMoisMap.set(
-          label,
-          honorairesParMoisMap.get(label)! +
-          Number(paiement.montant),
-        )
+      if (!entreesParMoisMap.has(label)) {
+        return
       }
+
+      entreesParMoisMap.set(
+        label,
+        (entreesParMoisMap.get(label) ?? 0) +
+        montant,
+      )
     }
 
-    // ============================================================
-    // RÉPONSE DU DASHBOARD
-    // ============================================================
+    for (const mouvement of mouvementsEntree6Mois) {
+      addToMonth(
+        new Date(mouvement.date),
+        num(mouvement.montant),
+      )
+    }
+
+    for (const paiement of paiementsLegacy6Mois) {
+      addToMonth(
+        new Date(paiement.datePaiement),
+        num(paiement.montant),
+      )
+    }
+
+    for (const provision of provisionsLegacy6Mois) {
+      addToMonth(
+        new Date(provision.datePaiement),
+        num(provision.montant),
+      )
+    }
+
+    const entreesParMois =
+      Array.from(
+        entreesParMoisMap.entries(),
+      ).map(([month, total]) => ({
+        month,
+        total,
+      }))
+
+    console.log(
+      '===== DASHBOARD FINANCE FINAL =====',
+      {
+        periode: {
+          startDate:
+            startDate.toISOString(),
+          endDate:
+            endDate.toISOString(),
+        },
+        entrees: {
+          mouvementsFinance:
+            totalEntreesModernes,
+          paiementsLegacy:
+            totalPaiementsLegacy,
+          provisionsLegacy:
+            totalProvisionsLegacy,
+          total:
+            totalEntrees,
+        },
+        totalSorties,
+        soldeGlobal,
+        impayes,
+      },
+    )
 
     return {
-      // ----------------------------------------------------------
-      // KPI EXISTANTS
-      // ----------------------------------------------------------
-
       dossiersActifs,
-
       echeancesSemaine,
-
-      honorairesEncaissesMois,
-
+      totalEntrees,
+      totalSorties,
+      soldeGlobal,
       impayes,
 
-      // ----------------------------------------------------------
-      // KPI CLIENTS
-      // ----------------------------------------------------------
-
       clients: {
-        total: clientsTotal,
-
-        actifs: clientsActifs,
-
-        inactifs: clientsInactifs,
+        total:
+          clientsTotal,
+        actifs:
+          clientsActifs,
+        inactifs:
+          clientsInactifs,
       },
-
-      // ----------------------------------------------------------
-      // PÉRIODE UTILISÉE
-      // ----------------------------------------------------------
 
       periode: {
         startDate:
           startDate.toISOString(),
-
         endDate:
           endDate.toISOString(),
       },
 
-      // ----------------------------------------------------------
-      // HONORAIRES PAR MOIS
-      // ----------------------------------------------------------
-
-      honorairesParMois:
-        Array.from(
-          honorairesParMoisMap.entries(),
-        ).map(
-          ([month, total]) => ({
-            month,
-            total,
-          }),
-        ),
-
-      // ----------------------------------------------------------
-      // DERNIERS PAIEMENTS
-      // ----------------------------------------------------------
+      entreesParMois,
 
       derniersPaiements:
         derniersPaiements.map(
           (paiement) => ({
-            id: paiement.id,
-
+            id:
+              paiement.id,
             montant:
-              Number(paiement.montant),
-
+              num(paiement.montant),
             datePaiement:
               paiement.datePaiement,
-
             numero:
               paiement.facture.numero,
-
             client:
               paiement.facture.client.nom,
           }),

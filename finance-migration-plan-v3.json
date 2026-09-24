@@ -1,0 +1,751 @@
+{
+  "generatedAt": "2026-09-23T19:12:30.566Z",
+  "version": 3,
+  "dryRun": true,
+  "period": {
+    "from": "2026-09-01T00:00:00.000Z",
+    "to": "2026-09-23T23:59:59.999Z"
+  },
+  "warning": "AUCUNE MIGRATION. Les comptes désactivés sont volontairement inclus comme candidats historiques. Chaque opération doit être validée manuellement.",
+  "migrationUserId": "",
+  "totals": {
+    "payments": 1520826,
+    "provisions": 901001,
+    "potentialMigrationTotal": 2421827,
+    "excludedOpeningFees": 200100
+  },
+  "accounts": [
+    {
+      "id": "cmtvjdgb30000rouofzqhyknr",
+      "nom": "Compte bancaire principal",
+      "type": "BANCAIRE",
+      "active": false,
+      "createdAt": "2026-09-10T13:01:29.680Z",
+      "moyensOperation": [
+        "VIREMENT",
+        "CHEQUE"
+      ]
+    },
+    {
+      "id": "cmtvjey4g0002rouonigy4kr9",
+      "nom": "Mobile Money - Wave - 0702911837",
+      "type": "MOBILE_MONEY",
+      "active": true,
+      "createdAt": "2026-09-10T13:02:39.424Z",
+      "moyensOperation": [
+        "MOBILE_MONEY"
+      ]
+    },
+    {
+      "id": "cmtvjr2ck0006rouo5clxdy14",
+      "nom": "Mobile Money - Wave - 0787733984",
+      "type": "MOBILE_MONEY",
+      "active": true,
+      "createdAt": "2026-09-10T13:12:04.772Z",
+      "moyensOperation": [
+        "MOBILE_MONEY"
+      ]
+    },
+    {
+      "id": "cmu7hj1330000yguoe0sbo2pu",
+      "nom": "Orange Money",
+      "type": "MOBILE_MONEY",
+      "active": true,
+      "createdAt": "2026-09-18T21:43:04.767Z",
+      "moyensOperation": [
+        "MOBILE_MONEY"
+      ]
+    },
+    {
+      "id": "cmu7i1lm90002yguov6rbdi9k",
+      "nom": "Compte bancaire - SGBCI - 12345678997",
+      "type": "BANCAIRE",
+      "active": true,
+      "createdAt": "2026-09-18T21:57:31.186Z",
+      "moyensOperation": [
+        "VIREMENT",
+        "CHEQUE"
+      ]
+    },
+    {
+      "id": "cmubfri8900004suoylno118g",
+      "nom": "Mobile Money - Orange Money - 0702911837",
+      "type": "MOBILE_MONEY",
+      "active": true,
+      "createdAt": "2026-09-21T16:04:45.706Z",
+      "moyensOperation": [
+        "MOBILE_MONEY"
+      ]
+    }
+  ],
+  "items": [
+    {
+      "kind": "PAIEMENT",
+      "id": "cmtivnlsk0003dsuol5nx2uuy",
+      "date": "2026-09-01T16:24:18.452Z",
+      "createdAt": "2026-09-01T16:24:18.452Z",
+      "montant": 826,
+      "dossier": "2026-005",
+      "facture": "FACT-2026-002",
+      "factureId": null,
+      "moyenPaiement": "especes",
+      "duplicateGroup": null,
+      "candidates": [],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PAIEMENT",
+      "id": "cmtmww0b70003okuo05hw5dyz",
+      "date": "2026-09-04T00:00:00.000Z",
+      "createdAt": "2026-09-04T12:09:54.835Z",
+      "montant": 8000,
+      "dossier": "2026-003",
+      "facture": "FACT-2026-004",
+      "factureId": null,
+      "moyenPaiement": "WAVE",
+      "duplicateGroup": "PAIEMENT|FACT-2026-004|2026-09-04|8000",
+      "candidates": [
+        {
+          "caisseId": "cmtvjey4g0002rouonigy4kr9",
+          "nom": "Mobile Money - Wave - 0702911837",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-10T13:02:39.424Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 120,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré ; nom du compte correspond à WAVE"
+        },
+        {
+          "caisseId": "cmtvjr2ck0006rouo5clxdy14",
+          "nom": "Mobile Money - Wave - 0787733984",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-10T13:12:04.772Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 120,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré ; nom du compte correspond à WAVE"
+        },
+        {
+          "caisseId": "cmu7hj1330000yguoe0sbo2pu",
+          "nom": "Orange Money",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-18T21:43:04.767Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 60,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré"
+        },
+        {
+          "caisseId": "cmubfri8900004suoylno118g",
+          "nom": "Mobile Money - Orange Money - 0702911837",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-21T16:04:45.706Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 60,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PAIEMENT",
+      "id": "cmtmwx2yv0005okuozp8t44jw",
+      "date": "2026-09-04T00:00:00.000Z",
+      "createdAt": "2026-09-04T12:10:44.935Z",
+      "montant": 8000,
+      "dossier": "2026-003",
+      "facture": "FACT-2026-004",
+      "factureId": null,
+      "moyenPaiement": "ESPECES",
+      "duplicateGroup": "PAIEMENT|FACT-2026-004|2026-09-04|8000",
+      "candidates": [],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PAIEMENT",
+      "id": "cmtr284xf0000ocuoicsqthj4",
+      "date": "2026-09-07T00:00:00.000Z",
+      "createdAt": "2026-09-07T09:50:23.475Z",
+      "montant": 2000,
+      "dossier": "2026-005",
+      "facture": "FACT-2026-003",
+      "factureId": null,
+      "moyenPaiement": "ESPECES",
+      "duplicateGroup": "PAIEMENT|FACT-2026-003|2026-09-07|2000",
+      "candidates": [],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PAIEMENT",
+      "id": "cmtr2tnpw0002ocuo7qt267l4",
+      "date": "2026-09-07T00:00:00.000Z",
+      "createdAt": "2026-09-07T10:07:07.604Z",
+      "montant": 2000,
+      "dossier": "2026-005",
+      "facture": "FACT-2026-003",
+      "factureId": null,
+      "moyenPaiement": "ESPECES",
+      "duplicateGroup": "PAIEMENT|FACT-2026-003|2026-09-07|2000",
+      "candidates": [],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PAIEMENT",
+      "id": "cmtr37enc000docuocx0qkxm0",
+      "date": "2026-09-07T00:00:00.000Z",
+      "createdAt": "2026-09-07T10:17:49.032Z",
+      "montant": 650000,
+      "dossier": "2026-006",
+      "facture": "FACT-2026-005",
+      "factureId": null,
+      "moyenPaiement": "CHEQUE",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmtvjdgb30000rouofzqhyknr",
+          "nom": "Compte bancaire principal",
+          "type": "BANCAIRE",
+          "active": false,
+          "createdAt": "2026-09-10T13:01:29.680Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        },
+        {
+          "caisseId": "cmu7i1lm90002yguov6rbdi9k",
+          "nom": "Compte bancaire - SGBCI - 12345678997",
+          "type": "BANCAIRE",
+          "active": true,
+          "createdAt": "2026-09-18T21:57:31.186Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PAIEMENT",
+      "id": "cmtshe72p0009ssuon9zjcyrf",
+      "date": "2026-09-08T00:00:00.000Z",
+      "createdAt": "2026-09-08T09:42:46.609Z",
+      "montant": 700000,
+      "dossier": "2026-007",
+      "facture": "FACT-2026-006",
+      "factureId": null,
+      "moyenPaiement": "CHEQUE",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmtvjdgb30000rouofzqhyknr",
+          "nom": "Compte bancaire principal",
+          "type": "BANCAIRE",
+          "active": false,
+          "createdAt": "2026-09-10T13:01:29.680Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        },
+        {
+          "caisseId": "cmu7i1lm90002yguov6rbdi9k",
+          "nom": "Compte bancaire - SGBCI - 12345678997",
+          "type": "BANCAIRE",
+          "active": true,
+          "createdAt": "2026-09-18T21:57:31.186Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PAIEMENT",
+      "id": "cmttx70440009w4uo6cwpmub2",
+      "date": "2026-09-10T00:00:00.000Z",
+      "createdAt": "2026-09-09T09:52:51.028Z",
+      "montant": 150000,
+      "dossier": "2026-008",
+      "facture": "FACT-2026-007",
+      "factureId": null,
+      "moyenPaiement": "CHEQUE",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmtvjdgb30000rouofzqhyknr",
+          "nom": "Compte bancaire principal",
+          "type": "BANCAIRE",
+          "active": false,
+          "createdAt": "2026-09-10T13:01:29.680Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        },
+        {
+          "caisseId": "cmu7i1lm90002yguov6rbdi9k",
+          "nom": "Compte bancaire - SGBCI - 12345678997",
+          "type": "BANCAIRE",
+          "active": true,
+          "createdAt": "2026-09-18T21:57:31.186Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtmx6lec0007okuoek52knpb",
+      "date": "2026-09-04T00:00:00.000Z",
+      "createdAt": "2026-09-04T12:18:08.724Z",
+      "montant": 1000,
+      "dossier": "2026-005",
+      "facture": null,
+      "factureId": null,
+      "moyenPaiement": "WAVE",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmtvjey4g0002rouonigy4kr9",
+          "nom": "Mobile Money - Wave - 0702911837",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-10T13:02:39.424Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 120,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré ; nom du compte correspond à WAVE"
+        },
+        {
+          "caisseId": "cmtvjr2ck0006rouo5clxdy14",
+          "nom": "Mobile Money - Wave - 0787733984",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-10T13:12:04.772Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 120,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré ; nom du compte correspond à WAVE"
+        },
+        {
+          "caisseId": "cmu7hj1330000yguoe0sbo2pu",
+          "nom": "Orange Money",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-18T21:43:04.767Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 60,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré"
+        },
+        {
+          "caisseId": "cmubfri8900004suoylno118g",
+          "nom": "Mobile Money - Orange Money - 0702911837",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-21T16:04:45.706Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 60,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtr32umy0007ocuohs8558js",
+      "date": "2026-09-07T00:00:00.000Z",
+      "createdAt": "2026-09-07T10:14:16.474Z",
+      "montant": 100000,
+      "dossier": "2026-006",
+      "facture": null,
+      "factureId": null,
+      "moyenPaiement": "VIREMENT",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmtvjdgb30000rouofzqhyknr",
+          "nom": "Compte bancaire principal",
+          "type": "BANCAIRE",
+          "active": false,
+          "createdAt": "2026-09-10T13:01:29.680Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        },
+        {
+          "caisseId": "cmu7i1lm90002yguov6rbdi9k",
+          "nom": "Compte bancaire - SGBCI - 12345678997",
+          "type": "BANCAIRE",
+          "active": true,
+          "createdAt": "2026-09-18T21:57:31.186Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtsh6n3r0005ssuowawykiek",
+      "date": "2026-09-08T00:00:00.000Z",
+      "createdAt": "2026-09-08T09:36:54.135Z",
+      "montant": 150000,
+      "dossier": "2026-007",
+      "facture": null,
+      "factureId": null,
+      "moyenPaiement": "ORANGE_MONEY",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmu7hj1330000yguoe0sbo2pu",
+          "nom": "Orange Money",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-18T21:43:04.767Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 120,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré ; nom du compte correspond à ORANGE"
+        },
+        {
+          "caisseId": "cmubfri8900004suoylno118g",
+          "nom": "Mobile Money - Orange Money - 0702911837",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-21T16:04:45.706Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 120,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré ; nom du compte correspond à ORANGE"
+        },
+        {
+          "caisseId": "cmtvjey4g0002rouonigy4kr9",
+          "nom": "Mobile Money - Wave - 0702911837",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-10T13:02:39.424Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 60,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré"
+        },
+        {
+          "caisseId": "cmtvjr2ck0006rouo5clxdy14",
+          "nom": "Mobile Money - Wave - 0787733984",
+          "type": "MOBILE_MONEY",
+          "active": true,
+          "createdAt": "2026-09-10T13:12:04.772Z",
+          "moyensOperation": [
+            "MOBILE_MONEY"
+          ],
+          "score": 60,
+          "raison": "compte mobile money ; legacy MOBILE_MONEY configuré"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmttx0vtk0005w4uovg1tztyl",
+      "date": "2026-09-09T00:00:00.000Z",
+      "createdAt": "2026-09-09T09:48:05.528Z",
+      "montant": 200000,
+      "dossier": "2026-008",
+      "facture": null,
+      "factureId": null,
+      "moyenPaiement": "CHEQUE",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmtvjdgb30000rouofzqhyknr",
+          "nom": "Compte bancaire principal",
+          "type": "BANCAIRE",
+          "active": false,
+          "createdAt": "2026-09-10T13:01:29.680Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        },
+        {
+          "caisseId": "cmu7i1lm90002yguov6rbdi9k",
+          "nom": "Compte bancaire - SGBCI - 12345678997",
+          "type": "BANCAIRE",
+          "active": true,
+          "createdAt": "2026-09-18T21:57:31.186Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtu08kgs00005ouopjl4mdnk",
+      "date": "2026-09-09T00:00:00.000Z",
+      "createdAt": "2026-09-09T11:18:02.909Z",
+      "montant": 100000,
+      "dossier": "2026-008",
+      "facture": "FACT-2026-007",
+      "factureId": "cmttx2hye0006w4uooxy0sf2x",
+      "moyenPaiement": null,
+      "duplicateGroup": null,
+      "candidates": [],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtu0eofj00065ouohtx7stmm",
+      "date": "2026-09-09T00:00:00.000Z",
+      "createdAt": "2026-09-09T11:22:47.983Z",
+      "montant": 100000,
+      "dossier": "2026-009",
+      "facture": "FACT-2026-008",
+      "factureId": "cmtu0dnab00035ouoamzeh3ng",
+      "moyenPaiement": "VIREMENT",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmtvjdgb30000rouofzqhyknr",
+          "nom": "Compte bancaire principal",
+          "type": "BANCAIRE",
+          "active": false,
+          "createdAt": "2026-09-10T13:01:29.680Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        },
+        {
+          "caisseId": "cmu7i1lm90002yguov6rbdi9k",
+          "nom": "Compte bancaire - SGBCI - 12345678997",
+          "type": "BANCAIRE",
+          "active": true,
+          "createdAt": "2026-09-18T21:57:31.186Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtu26r9c000a5ouom635xutc",
+      "date": "2026-09-09T00:00:00.000Z",
+      "createdAt": "2026-09-09T12:12:37.632Z",
+      "montant": 100000,
+      "dossier": "2026-010",
+      "facture": null,
+      "factureId": null,
+      "moyenPaiement": null,
+      "duplicateGroup": "PROVISION|2026-010|2026-09-09|100000",
+      "candidates": [],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtu28wx0000e5ouoglxhomxx",
+      "date": "2026-09-09T00:00:00.000Z",
+      "createdAt": "2026-09-09T12:14:18.276Z",
+      "montant": 100000,
+      "dossier": "2026-010",
+      "facture": "FACT-2026-009",
+      "factureId": "cmtu27ui4000b5ouos2tgy80y",
+      "moyenPaiement": null,
+      "duplicateGroup": "PROVISION|2026-010|2026-09-09|100000",
+      "candidates": [],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtu4jfr3000i5ouo0fr5tz87",
+      "date": "2026-09-09T00:00:00.000Z",
+      "createdAt": "2026-09-09T13:18:28.479Z",
+      "montant": 50000,
+      "dossier": "2026-011",
+      "facture": null,
+      "factureId": null,
+      "moyenPaiement": "CHEQUE",
+      "duplicateGroup": null,
+      "candidates": [
+        {
+          "caisseId": "cmtvjdgb30000rouofzqhyknr",
+          "nom": "Compte bancaire principal",
+          "type": "BANCAIRE",
+          "active": false,
+          "createdAt": "2026-09-10T13:01:29.680Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        },
+        {
+          "caisseId": "cmu7i1lm90002yguov6rbdi9k",
+          "nom": "Compte bancaire - SGBCI - 12345678997",
+          "type": "BANCAIRE",
+          "active": true,
+          "createdAt": "2026-09-18T21:57:31.186Z",
+          "moyensOperation": [
+            "VIREMENT",
+            "CHEQUE"
+          ],
+          "score": 170,
+          "raison": "moyen explicitement autorisé ; type bancaire compatible"
+        }
+      ],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    },
+    {
+      "kind": "PROVISION",
+      "id": "cmtu4n37l000m5ouobmymjuny",
+      "date": "2026-09-09T00:00:00.000Z",
+      "createdAt": "2026-09-09T13:21:18.849Z",
+      "montant": 1,
+      "dossier": "2026-011",
+      "facture": "FACT-2026-010",
+      "factureId": "cmtu4kl7w000j5ouoiqeoztw2",
+      "moyenPaiement": null,
+      "duplicateGroup": null,
+      "candidates": [],
+      "selectedCaisseId": "",
+      "migrate": false,
+      "reviewStatus": "A_VALIDER",
+      "reviewNote": ""
+    }
+  ],
+  "excludedOpeningFees": [
+    {
+      "id": "cmu93xd16000b6cuoysho0n1d",
+      "dossier": "2026-012",
+      "factureId": "cmu93xc3d00076cuottbg8qsq",
+      "facture": "FACT-2026-012",
+      "date": "2026-09-20T00:00:00.000Z",
+      "createdAt": "2026-09-20T00:57:51.162Z",
+      "montant": 100000,
+      "migrate": false,
+      "reviewStatus": "EXCLU_PAR_SECURITE",
+      "reviewNote": "Vérifier si le paiement de facture porte déjà cet encaissement."
+    },
+    {
+      "id": "cmucxx1540001akuocp1pdy0k",
+      "dossier": "2026-020",
+      "factureId": "cmudzjxrv0000n8uo14r1lwhu",
+      "facture": "FACT-2026-017",
+      "date": "2026-09-23T00:00:00.000Z",
+      "createdAt": "2026-09-22T17:20:42.760Z",
+      "montant": 100100,
+      "migrate": false,
+      "reviewStatus": "EXCLU_PAR_SECURITE",
+      "reviewNote": "Vérifier si le paiement de facture porte déjà cet encaissement."
+    }
+  ]
+}
