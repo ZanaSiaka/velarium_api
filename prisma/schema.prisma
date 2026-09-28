@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
+
+  output = "../generated/prisma"
 }
 
 datasource db {
@@ -8,30 +9,51 @@ datasource db {
 }
 
 model User {
-  id               String   @id @default(cuid())
-  name             String
-  email            String   @unique
-  passwordHash     String
-  role             Role     @default(COLLABORATEUR_ASSOCIE)
-  image            String?
-  twoFactorEnabled Boolean  @default(false)
-  twoFactorSecret  String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  active           Boolean  @default(true)
+  id String @id @default(cuid())
 
-  activityLogs          ActivityLog[]
-  documentsDeposes      Document[]             @relation("DocumentUploadedBy")
+  name String
+
+  email String @unique
+
+  passwordHash String
+
+  role Role @default(COLLABORATEUR_ASSOCIE)
+
+  image String?
+
+  twoFactorEnabled Boolean @default(false)
+
+  twoFactorSecret String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  active Boolean @default(true)
+
+  activityLogs ActivityLog[]
+
+  documentsDeposes Document[] @relation("DocumentUploadedBy")
+
   documentConsultations DocumentConsultation[]
-  dossiersResponsable   Dossier[]              @relation("DossierAvocatResponsable")
+
+  dossiersResponsable Dossier[] @relation("DossierAvocatResponsable")
+
   dossierCollaborations DossierCollaborateur[]
-  evenementsCrees       Evenement[]            @relation("EvenementCreatedBy")
-  tachesAssignees       Tache[]                @relation("TachesAssignees")
-  tachesCreees          Tache[]                @relation("TachesCreees")
-  contrats              ContratUtilisateur[]   @relation("UserContrats")
-  pieces                PieceUtilisateur[]     @relation("UserPieces")
-  mouvementsFinance     MouvementFinance[]
-  piecesJointesFinance  PieceJointeFinance[]   @relation("FinancePieceUploadedBy")
+
+  evenementsCrees Evenement[] @relation("EvenementCreatedBy")
+
+  tachesAssignees Tache[] @relation("TachesAssignees")
+
+  tachesCreees Tache[] @relation("TachesCreees")
+
+  contrats ContratUtilisateur[] @relation("UserContrats")
+
+  pieces PieceUtilisateur[] @relation("UserPieces")
+
+  mouvementsFinance MouvementFinance[]
+
+  piecesJointesFinance PieceJointeFinance[] @relation("FinancePieceUploadedBy")
 
   recusEncaissementCrees RecuEncaissement[] @relation("RecuCreatedBy")
 
@@ -42,18 +64,21 @@ model ContratUtilisateur {
   id String @id @default(cuid())
 
   userId String
-  user   User   @relation("UserContrats", fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation("UserContrats", fields: [userId], references: [id], onDelete: Cascade)
 
   type TypeContrat
 
   dateDebut DateTime
-  dateFin   DateTime?
+
+  dateFin DateTime?
 
   poste String?
 
   actif Boolean @default(true)
 
   createdAt DateTime @default(now())
+
   updatedAt DateTime @updatedAt
 
   pieces PieceUtilisateur[]
@@ -65,19 +90,23 @@ model PieceUtilisateur {
   id String @id @default(cuid())
 
   userId String
-  user   User   @relation("UserPieces", fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation("UserPieces", fields: [userId], references: [id], onDelete: Cascade)
 
   contratId String?
-  contrat   ContratUtilisateur? @relation(fields: [contratId], references: [id], onDelete: SetNull)
+
+  contrat ContratUtilisateur? @relation(fields: [contratId], references: [id], onDelete: SetNull)
 
   type TypePieceUtilisateur
 
   nom String
+
   url String
 
   dateExpiration DateTime?
 
   createdAt DateTime @default(now())
+
   updatedAt DateTime @updatedAt
 
   @@index([userId])
@@ -85,67 +114,114 @@ model PieceUtilisateur {
 }
 
 model PasswordResetToken {
-  id         String   @id @default(cuid())
+  id String @id @default(cuid())
+
   identifier String
-  token      String   @unique
-  expires    DateTime
+
+  token String @unique
+
+  expires DateTime
 
   @@unique([identifier, token])
 }
 
 model Client {
-  id        String     @id @default(cuid())
-  type      ClientType @default(PARTICULIER)
-  nom       String
-  email     String?
+  id String @id @default(cuid())
+
+  type ClientType @default(PARTICULIER)
+
+  nom String
+
+  email String?
+
   telephone String?
-  adresse   String?
-  notes     String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  dossiers  Dossier[]
-  factures  Facture[]
+
+  adresse String?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  dossiers Dossier[]
+
+  factures Facture[]
 }
 
 model Dossier {
-  id                    String                 @id @default(cuid())
-  reference             String                 @unique
-  type                  String?
-  statut                DossierStatut          @default(EN_COURS)
-  clientId              String
-  avocatResponsableId   String
-  juridiction           String?
-  partieAdverse         String?
-  dateOuverture         DateTime               @default(now())
-  dateCloture           DateTime?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  archive               Boolean                @default(false)
-  archivedAt            DateTime?
-  avocatClientEmail     String?
-  avocatClientNom       String?
+  id String @id @default(cuid())
+
+  reference String @unique
+
+  type String?
+
+  statut DossierStatut @default(EN_COURS)
+
+  clientId String
+
+  avocatResponsableId String
+
+  juridiction String?
+
+  partieAdverse String?
+
+  dateOuverture DateTime @default(now())
+
+  dateCloture DateTime?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  archive Boolean @default(false)
+
+  archivedAt DateTime?
+
+  avocatClientEmail String?
+
+  avocatClientNom String?
+
   avocatClientTelephone String?
-  declarationSoupcon    String?
-  kycSoupcon            Boolean                @default(false)
-  natureAffaire         String?
-  typeDossier           String?
-  activityLogs          ActivityLog[]
+
+  declarationSoupcon String?
+
+  kycSoupcon Boolean @default(false)
+
+  natureAffaire String?
+
+  typeDossier String?
+
+  activityLogs ActivityLog[]
+
   conventionsHonoraires ConventionHonoraires[]
-  documents             Document[]
-  avocatResponsable     User                   @relation("DossierAvocatResponsable", fields: [avocatResponsableId], references: [id])
-  client                Client                 @relation(fields: [clientId], references: [id])
-  collaborateurs        DossierCollaborateur[]
-  evenements            Evenement[]
-  factures              Facture[]
-  provisions            Provision[]
-  taches                Tache[]
-  mouvementsFinance     MouvementFinance[]
-  fraisOuverture        FraisOuvertureDossier?
-  recusEncaissement     RecuEncaissement[]
+
+  documents Document[]
+
+  avocatResponsable User @relation("DossierAvocatResponsable", fields: [avocatResponsableId], references: [id])
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  collaborateurs DossierCollaborateur[]
+
+  evenements Evenement[]
+
+  factures Facture[]
+
+  provisions Provision[]
+
+  taches Tache[]
+
+  mouvementsFinance MouvementFinance[]
+
+  fraisOuverture FraisOuvertureDossier?
+
+  recusEncaissement RecuEncaissement[]
 }
 
 model FraisOuvertureDossier {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
+
   dossierId String @unique
 
   montant Decimal @db.Decimal(14, 2)
@@ -154,15 +230,18 @@ model FraisOuvertureDossier {
 
   datePaiement DateTime?
 
-  mouvementFinanceId String?           @unique
-  mouvementFinance   MouvementFinance? @relation("FraisOuvertureMouvementFinance", fields: [mouvementFinanceId], references: [id], onDelete: SetNull)
+  mouvementFinanceId String? @unique
 
-  factureId String?  @unique
-  facture   Facture? @relation("FraisOuvertureFacture", fields: [factureId], references: [id], onDelete: SetNull)
+  mouvementFinance MouvementFinance? @relation("FraisOuvertureMouvementFinance", fields: [mouvementFinanceId], references: [id], onDelete: SetNull)
+
+  factureId String? @unique
+
+  facture Facture? @relation("FraisOuvertureFacture", fields: [factureId], references: [id], onDelete: SetNull)
 
   dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
+
   updatedAt DateTime @updatedAt
 
   @@index([statut])
@@ -170,91 +249,126 @@ model FraisOuvertureDossier {
 }
 
 model DossierCollaborateur {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
+
   dossierId String
-  userId    String
+
+  userId String
+
   createdAt DateTime @default(now())
-  dossier   Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([dossierId, userId])
 }
 
 model Evenement {
-  id          String        @id @default(cuid())
-  title       String
+  id String @id @default(cuid())
+
+  title String
+
   description String?
-  start       DateTime
-  end         DateTime?
-  color       String?
-  eventType   EvenementType @default(AUTRE)
-  location    String?
-  dossierId   String?
+
+  start DateTime
+
+  end DateTime?
+
+  color String?
+
+  eventType EvenementType @default(AUTRE)
+
+  location String?
+
+  dossierId String?
+
   createdById String
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  createdBy   User          @relation("EvenementCreatedBy", fields: [createdById], references: [id])
-  dossier     Dossier?      @relation(fields: [dossierId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  createdBy User @relation("EvenementCreatedBy", fields: [createdById], references: [id])
+
+  dossier Dossier? @relation(fields: [dossierId], references: [id])
 }
 
 model ConventionHonoraires {
-  id                 String   @id @default(cuid())
-  dossierId          String
+  id String @id @default(cuid())
+
+  dossierId String
+
   montantForfaitaire Decimal? @db.Decimal(14, 2)
-  tauxHoraire        Decimal? @db.Decimal(14, 2)
-  conditions         String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  dossier            Dossier  @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  tauxHoraire Decimal? @db.Decimal(14, 2)
+
+  conditions String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
 }
 
 model Facture {
-  id     String @id @default(cuid())
+  id String @id @default(cuid())
+
   numero String @unique
 
   statut FactureStatut @default(BROUILLON)
 
   dossierId String
-  clientId  String
 
-  // Source obligatoire de la facture.
-  // Toutes les anciennes factures étant déjà liées à un dossier,
-  // DOSSIER est un défaut cohérent.
+  clientId String
+
   source SourceFacture @default(DOSSIER)
 
-  // Utilisé principalement lorsque source = AUTRE
   sourceLibelle String?
 
   dateEmission DateTime @default(now())
+
   dateEcheance DateTime
 
-  montantHT  Decimal @db.Decimal(14, 2)
-  tauxTVA    Decimal @default(18) @db.Decimal(5, 2)
+  montantHT Decimal @db.Decimal(14, 2)
+
+  tauxTVA Decimal @default(18) @db.Decimal(5, 2)
+
   montantTVA Decimal @db.Decimal(14, 2)
+
   montantTTC Decimal @db.Decimal(14, 2)
 
+  note String?
+
   mentionRCCM String?
-  mentionNCC  String?
+
+  mentionNCC String?
 
   createdAt DateTime @default(now())
+
   updatedAt DateTime @updatedAt
 
   client Client @relation(fields: [clientId], references: [id])
 
   dossier Dossier @relation(fields: [dossierId], references: [id])
 
-  lignes     LigneFacture[]
-  paiements  Paiement[]
+  lignes LigneFacture[]
+
+  paiements Paiement[]
+
   provisions Provision[]
 
   fraisOuvertureDossier FraisOuvertureDossier? @relation("FraisOuvertureFacture")
-  imputationsProvision  ImputationProvision[]
+
+  imputationsProvision ImputationProvision[]
 
   @@index([source])
 }
 
 model LigneFacture {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
+
   factureId String
 
   type TypeLigneFacture @default(AUTRE)
@@ -273,7 +387,8 @@ model LigneFacture {
 }
 
 model Paiement {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
+
   factureId String
 
   montant Decimal @db.Decimal(14, 2)
@@ -281,9 +396,9 @@ model Paiement {
   datePaiement DateTime @default(now())
 
   moyenPaiement String?
-  note          String?
 
-  // Un paiement réel correspond à un seul mouvement Finance
+  note String?
+
   mouvementFinanceId String? @unique
 
   createdAt DateTime @default(now())
@@ -355,58 +470,97 @@ model ImputationProvision {
 }
 
 model Document {
-  id            String                 @id @default(cuid())
-  nom           String
-  dossierId     String
-  storageKey    String
-  url           String?
-  taille        Int?
-  type          String?
-  visibilite    DocumentVisibilite     @default(INTERNE)
-  uploadedById  String
-  createdAt     DateTime               @default(now())
-  dossier       Dossier                @relation(fields: [dossierId], references: [id], onDelete: Cascade)
-  uploadedBy    User                   @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  id String @id @default(cuid())
+
+  nom String
+
+  dossierId String
+
+  storageKey String
+
+  url String?
+
+  taille Int?
+
+  type String?
+
+  visibilite DocumentVisibilite @default(INTERNE)
+
+  uploadedById String
+
+  createdAt DateTime @default(now())
+
+  dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Cascade)
+
+  uploadedBy User @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+
   consultations DocumentConsultation[]
 }
 
 model DocumentConsultation {
-  id          String   @id @default(cuid())
-  documentId  String
-  userId      String
+  id String @id @default(cuid())
+
+  documentId String
+
+  userId String
+
   consultedAt DateTime @default(now())
-  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id])
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 model ActivityLog {
-  id         String   @id @default(cuid())
-  userId     String
-  action     String
+  id String @id @default(cuid())
+
+  userId String
+
+  action String
+
   entityType String
-  entityId   String
-  metadata   Json?
-  dossierId  String?
-  createdAt  DateTime @default(now())
-  dossier    Dossier? @relation(fields: [dossierId], references: [id])
-  user       User     @relation(fields: [userId], references: [id])
+
+  entityId String
+
+  metadata Json?
+
+  dossierId String?
+
+  createdAt DateTime @default(now())
+
+  dossier Dossier? @relation(fields: [dossierId], references: [id])
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 model Tache {
-  id           String        @id @default(cuid())
-  titre        String
-  description  String?
-  statut       TacheStatut   @default(A_FAIRE)
-  priorite     TachePriorite @default(NORMALE)
+  id String @id @default(cuid())
+
+  titre String
+
+  description String?
+
+  statut TacheStatut @default(A_FAIRE)
+
+  priorite TachePriorite @default(NORMALE)
+
   dateEcheance DateTime?
-  createurId   String
-  assigneAId   String
-  dossierId    String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  assigneA     User          @relation("TachesAssignees", fields: [assigneAId], references: [id])
-  createur     User          @relation("TachesCreees", fields: [createurId], references: [id])
-  dossier      Dossier?      @relation(fields: [dossierId], references: [id])
+
+  createurId String
+
+  assigneAId String
+
+  dossierId String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  assigneA User @relation("TachesAssignees", fields: [assigneAId], references: [id])
+
+  createur User @relation("TachesCreees", fields: [createurId], references: [id])
+
+  dossier Dossier? @relation(fields: [dossierId], references: [id])
 
   @@index([assigneAId])
   @@index([createurId])
@@ -416,27 +570,32 @@ model Tache {
 }
 
 model Caisse {
-  id     String     @id @default(cuid())
-  nom    String
-  type   TypeCaisse
-  devise String     @default("XOF")
+  id String @id @default(cuid())
+
+  nom String
+
+  type TypeCaisse
+
+  devise String @default("XOF")
 
   soldeInitial Decimal @default(0) @db.Decimal(15, 2)
 
-  // Informations du compte
   institution String?
-  identifiant String?
-  titulaire   String?
 
-  // Moyens utilisables sur ce compte
+  identifiant String?
+
+  titulaire String?
+
   moyensOperation MoyenOperationCompte[] @default([])
 
   active Boolean @default(true)
 
   createdAt DateTime @default(now())
+
   updatedAt DateTime @updatedAt
 
-  mouvements         MouvementFinance[] @relation("CaisseMouvements")
+  mouvements MouvementFinance[] @relation("CaisseMouvements")
+
   transfertsEntrants MouvementFinance[] @relation("CaisseDestination")
 }
 
@@ -557,16 +716,21 @@ model RecuEncaissement {
 model PieceJointeFinance {
   id String @id @default(cuid())
 
-  nom        String
-  storageKey String  @unique
-  taille     Int?
-  type       String?
+  nom String
+
+  storageKey String @unique
+
+  taille Int?
+
+  type String?
 
   mouvementId String
-  mouvement   MouvementFinance @relation(fields: [mouvementId], references: [id], onDelete: Cascade)
+
+  mouvement MouvementFinance @relation(fields: [mouvementId], references: [id], onDelete: Cascade)
 
   uploadedById String
-  uploadedBy   User   @relation("FinancePieceUploadedBy", fields: [uploadedById], references: [id])
+
+  uploadedBy User @relation("FinancePieceUploadedBy", fields: [uploadedById], references: [id])
 
   createdAt DateTime @default(now())
 
@@ -576,170 +740,248 @@ model PieceJointeFinance {
 
 enum Role {
   AVOCAT
+
   COLLABORATEUR_ASSOCIE
+
   AVOCAT_STAGIAIRE
+
   JURISTE
+
   ARCHIVISTE
+
   SECRETARIAT
+
   COMPTABLE
 }
 
 enum ClientType {
   PARTICULIER
+
   ENTREPRISE
 }
 
 enum DossierStatut {
   EN_COURS
+
   EN_ATTENTE
+
   CLOTURE
 }
 
 enum EvenementType {
   AUDIENCE
+
   DELAI
+
   DEPOT
+
   RENDEZ_VOUS
+
   AUTRE
 }
 
 enum FactureStatut {
   BROUILLON
+
   ENVOYEE
+
   PARTIELLEMENT_PAYEE
+
   PAYEE
+
   EN_RETARD
 }
 
 enum DocumentVisibilite {
   INTERNE
+
   VISIBLE_CLIENT
 }
 
 enum TacheStatut {
   A_FAIRE
+
   EN_COURS
+
   TERMINEE
+
   ANNULEE
 }
 
 enum TachePriorite {
   BASSE
+
   NORMALE
+
   HAUTE
+
   URGENTE
 }
 
 enum TypeContrat {
   CDI
+
   CDD
+
   STAGE
+
   ALTERNANCE
+
   FREELANCE
+
   PRESTATION
+
   AUTRE
 }
 
 enum TypePieceUtilisateur {
   CNI
+
   PASSEPORT
+
   CONTRAT
+
   DIPLOME
+
   ATTESTATION
+
   CV
+
   PHOTO
+
   AUTRE
 }
 
 enum TypeCaisse {
   BANCAIRE
+
   EPARGNE
+
   CARTE_BANCAIRE
+
   MOBILE_MONEY
+
   ESPECES
+
   AUTRE
 }
 
 enum MoyenOperationCompte {
   VIREMENT
+
   CHEQUE
 
   ORANGE_MONEY
+
   WAVE
+
   MTN_MONEY
+
   MOOV_MONEY
 
   PAIEMENT_CARTE
 
   ESPECES
 
-  // TEMPORAIRE : anciennes valeurs
-  // On les supprimera après migration des données existantes.
   CARTE
+
   MOBILE_MONEY
 }
 
 enum TypeMouvementFinance {
   ENTREE
+
   SORTIE
+
   TRANSFERT
 }
 
 enum StatutFraisOuverture {
   A_PAYER
+
   PAYE
 
-  // TEMPORAIRE
   A_FACTURER
+
   FACTURE
 }
 
 enum SourceFacture {
   DOSSIER
+
   FRAIS_OUVERTURE_DOSSIER
+
   AUTRE
 }
 
 enum SourceMouvementFinance {
   PAIEMENT_FACTURE
+
   FRAIS_OUVERTURE_DOSSIER
+
   PROVISION
+
   TRANSFERT
+
   ACHAT
+
   LOYER
+
   SALAIRE
+
   REMBOURSEMENT
+
   IMPOT_TAXE
+
   AUTRE
 }
 
 enum TypeLigneFacture {
   HONORAIRES
+
   FRAIS_OUVERTURE_DOSSIER
+
   AUTRE
 }
 
 enum CategorieFinance {
   HONORAIRES
+
   FRAIS_OUVERTURE_DOSSIER
+
   PAIEMENT_FACTURE
+
   PROVISION
+
   REMBOURSEMENT
+
   DEPOT
+
   RETRAIT
+
   ACHAT
+
   FOURNITURES
+
   SALAIRES
+
   LOYER
+
   ELECTRICITE
+
   INTERNET
+
   TRANSPORT
+
   FRAIS_BANCAIRES
+
   IMPOTS_TAXES
+
   AUTRE
 }
 
 enum TypeRecuEncaissement {
   FRAIS_OUVERTURE_DOSSIER
+
   PROVISION
 }

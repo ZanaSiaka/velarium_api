@@ -893,6 +893,11 @@ export class FacturesService {
 
                     montantTTC,
 
+                    note:
+                      dto.note
+                        ?.trim() ||
+                      null,
+
                     mentionRCCM:
                       CABINET_INFO.rccm,
 
