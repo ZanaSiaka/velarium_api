@@ -58,6 +58,8 @@ model User {
   recusEncaissementCrees RecuEncaissement[] @relation("RecuCreatedBy")
 
   imputationsProvisionCreees ImputationProvision[] @relation("ImputationProvisionCreatedBy")
+
+  googleCalendarConnection GoogleCalendarConnection?
 }
 
 model ContratUtilisateur {
@@ -292,6 +294,90 @@ model Evenement {
   createdBy User @relation("EvenementCreatedBy", fields: [createdById], references: [id])
 
   dossier Dossier? @relation(fields: [dossierId], references: [id])
+}
+
+model GoogleCalendarConnection {
+  id String @id @default(cuid())
+
+  userId String @unique
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  googleAccountId String?
+  googleEmail     String?
+
+  calendarId String @default("primary")
+
+  refreshTokenEncrypted String
+
+  scope String?
+
+  syncToken String?
+
+  status GoogleCalendarConnectionStatus @default(CONNECTED)
+
+  lastSyncAt     DateTime?
+  lastFullSyncAt DateTime?
+  lastSyncError  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events GoogleCalendarEvent[]
+
+  @@index([userId])
+}
+
+model GoogleCalendarEvent {
+  id String @id @default(cuid())
+
+  connectionId String
+
+  connection GoogleCalendarConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  googleEventId    String
+  googleCalendarId String
+
+  title       String?
+  description String?
+  location    String?
+
+  startAt DateTime?
+  endAt   DateTime?
+
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  isAllDay Boolean @default(false)
+
+  status    String?
+  eventType String?
+
+  htmlLink    String?
+  hangoutLink String?
+
+  organizerEmail String?
+  creatorEmail   String?
+
+  recurringEventId String?
+
+  recurrence String[] @default([])
+
+  attendees Json?
+
+  etag String?
+
+  googleCreatedAt DateTime?
+  googleUpdatedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([connectionId, googleEventId])
+  @@index([connectionId])
+  @@index([connectionId, startAt])
+  @@index([connectionId, startDate])
+  @@index([googleEventId])
 }
 
 model ConventionHonoraires {
@@ -736,6 +822,11 @@ model PieceJointeFinance {
 
   @@index([mouvementId])
   @@index([uploadedById])
+}
+
+enum GoogleCalendarConnectionStatus {
+  CONNECTED
+  ERROR
 }
 
 enum Role {

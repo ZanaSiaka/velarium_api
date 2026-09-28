@@ -20,6 +20,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PaiementsModule } from './modules/paiements/paiements.module';
 import { FinanceModule } from './modules/finance/finance.module';
+import { GoogleCalendarModule } from './modules/google-calendar/google-calendar.module';
 @Module({
   imports: [
     PrismaModule,
@@ -37,6 +38,7 @@ import { FinanceModule } from './modules/finance/finance.module';
     RecusModule,
     PaiementsModule,
     FinanceModule,
+    GoogleCalendarModule,
   ],
 
   controllers: [AppController],
