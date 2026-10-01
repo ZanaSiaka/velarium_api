@@ -15,6 +15,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { google, calendar_v3 } from 'googleapis';
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
+import { GoogleCalendarEventWriteDto } from './dto/google-calendar-event-write.dto';
 import { GoogleCalendarEventsQueryDto } from './dto/google-calendar-events-query.dto';
 import { GoogleCalendarStatusDto } from './dto/google-calendar-status.dto';
 import {
@@ -30,7 +31,11 @@ import { mapGoogleEvent } from './google-calendar.mapper';
 const GOOGLE_SCOPES = [
     'openid',
     'email',
-    'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/calendar.events',
+];
+const GOOGLE_WRITE_SCOPES = [
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar',
 ];
 const GOOGLE_PAGE_SIZE = 250;
 const OAUTH_STATE_TTL_SECONDS = 10 * 60;
@@ -144,7 +149,7 @@ export class GoogleCalendarService {
                     googleEmail,
                     calendarId: 'primary',
                     refreshTokenEncrypted,
-                    scope: tokens.scope ?? null,
+                    scope: tokens.scope ?? GOOGLE_SCOPES.join(' '),
                     syncToken: null,
                     status: 'CONNECTED',
                     lastSyncAt: null,
@@ -157,12 +162,16 @@ export class GoogleCalendarService {
                     googleEmail,
                     calendarId: 'primary',
                     refreshTokenEncrypted,
-                    scope: tokens.scope ?? null,
+                    scope: tokens.scope ?? GOOGLE_SCOPES.join(' '),
                 },
             });
         });
 
-        await this.syncConnection(connection);
+        try {
+            await this.syncConnection(connection);
+        } catch {
+            // Tokens already saved; sync can be retried from the UI.
+        }
     }
 
     async getStatus(userId: string): Promise<GoogleCalendarStatusDto> {
@@ -249,6 +258,86 @@ export class GoogleCalendarService {
         };
     }
 
+    async createEvent(userId: string, dto: GoogleCalendarEventWriteDto) {
+        const connection = await this.requireWritableConnection(userId);
+        const { api } = await this.getAuthenticatedClient(connection);
+        try {
+            const response = await api.events.insert({
+                calendarId: connection.calendarId || 'primary',
+                requestBody: this.toGoogleEventResource(dto),
+            });
+            if (!response.data?.id) {
+                throw new BadGatewayException(
+                    'Google Calendar n’a pas renvoyé l’événement créé.',
+                );
+            }
+            return this.persistGoogleEvent(connection, response.data);
+        } catch (error) {
+            if (
+                error instanceof BadGatewayException ||
+                error instanceof BadRequestException
+            ) {
+                throw error;
+            }
+            return this.handleSyncError(connection.id, error);
+        }
+    }
+
+    async updateEvent(
+        userId: string,
+        googleEventId: string,
+        dto: GoogleCalendarEventWriteDto,
+    ) {
+        const connection = await this.requireWritableConnection(userId);
+        const { api } = await this.getAuthenticatedClient(connection);
+        try {
+            const response = await api.events.update({
+                calendarId: connection.calendarId,
+                eventId: decodeURIComponent(googleEventId),
+                requestBody: this.toGoogleEventResource(dto),
+            });
+            if (!response.data?.id) {
+                throw new BadGatewayException(
+                    'Google Calendar n’a pas renvoyé l’événement mis à jour.',
+                );
+            }
+            return this.persistGoogleEvent(connection, response.data);
+        } catch (error) {
+            if (
+                error instanceof BadGatewayException ||
+                error instanceof BadRequestException
+            ) {
+                throw error;
+            }
+            return this.handleSyncError(connection.id, error);
+        }
+    }
+
+    async deleteEvent(userId: string, googleEventId: string) {
+        const connection = await this.requireWritableConnection(userId);
+        const { api } = await this.getAuthenticatedClient(connection);
+        const eventId = decodeURIComponent(googleEventId);
+        try {
+            await api.events.delete({
+                calendarId: connection.calendarId,
+                eventId,
+            });
+        } catch (error) {
+            const status = this.getGoogleError(error).response?.status;
+            if (status !== 404 && status !== 410) {
+                return this.handleSyncError(connection.id, error);
+            }
+        }
+
+        await this.prisma.googleCalendarEvent.deleteMany({
+            where: {
+                connectionId: connection.id,
+                googleEventId: eventId,
+            },
+        });
+        return { success: true as const };
+    }
+
     async syncForUser(userId: string): Promise<GoogleCalendarSyncResult> {
         const connection = await this.prisma.googleCalendarConnection.findUnique({
             where: { userId },
@@ -329,7 +418,7 @@ export class GoogleCalendarService {
     private async fullSync(
         connection: GoogleCalendarConnection,
     ): Promise<GoogleCalendarSyncResult> {
-        const { api } = this.getAuthenticatedClient(connection);
+        const { api } = await this.getAuthenticatedClient(connection);
         const counts: SyncCounts = { created: 0, updated: 0, deleted: 0 };
         let pageToken: string | undefined;
         let nextSyncToken: string | undefined;
@@ -369,7 +458,7 @@ export class GoogleCalendarService {
         connection: GoogleCalendarConnection,
     ): Promise<GoogleCalendarSyncResult> {
         if (!connection.syncToken) return this.fullSync(connection);
-        const { api } = this.getAuthenticatedClient(connection);
+        const { api } = await this.getAuthenticatedClient(connection);
         const counts: SyncCounts = { created: 0, updated: 0, deleted: 0 };
         let pageToken: string | undefined;
         let nextSyncToken: string | undefined;
@@ -457,14 +546,15 @@ export class GoogleCalendarService {
         }
     }
 
-    private getAuthenticatedClient(connection: GoogleCalendarConnection): {
+    private async getAuthenticatedClient(connection: GoogleCalendarConnection): Promise<{
         oauth: OAuth2Client;
         api: calendar_v3.Calendar;
-    } {
+    }> {
         const oauth = this.createOAuthClient();
         oauth.setCredentials({
             refresh_token: decryptGoogleToken(connection.refreshTokenEncrypted),
         });
+        await oauth.getAccessToken();
         return { oauth, api: google.calendar({ version: 'v3', auth: oauth }) };
     }
 
@@ -556,9 +646,114 @@ export class GoogleCalendarService {
         });
         if (!user || !user.active) {
             throw new NotFoundException(
-                'Velarium user was not found or is inactive.',
+                'Utilisateur Velarium introuvable ou inactif.',
             );
         }
+    }
+
+    private async requireWritableConnection(userId: string) {
+        const connection =
+            await this.prisma.googleCalendarConnection.findUnique({
+                where: { userId },
+            });
+        if (!connection) {
+            throw new ConflictException(
+                'Google Calendar n’est pas connecté.',
+            );
+        }
+        this.assertWriteScope(connection);
+        return connection;
+    }
+
+    private assertWriteScope(connection: GoogleCalendarConnection): void {
+        const scopes = (connection.scope ?? '')
+            .split(/[ ,]+/)
+            .filter(Boolean);
+        if (scopes.length === 0) return;
+        const canWrite = scopes.some((scope) =>
+            GOOGLE_WRITE_SCOPES.some(
+                (allowed) =>
+                    scope === allowed ||
+                    scope.endsWith('/auth/calendar.events') ||
+                    (scope.endsWith('/auth/calendar') &&
+                        !scope.includes('readonly')),
+            ),
+        );
+        if (!canWrite) {
+            throw new ServiceUnavailableException({
+                code: 'GOOGLE_RECONNECT_REQUIRED',
+                message:
+                    'La connexion Google Calendar doit être renouvelée pour créer ou modifier des événements.',
+            });
+        }
+    }
+
+    private toGoogleEventResource(
+        dto: GoogleCalendarEventWriteDto,
+    ): calendar_v3.Schema$Event {
+        const timeZone =
+            process.env.GOOGLE_CALENDAR_TIMEZONE ?? 'Europe/Paris';
+
+        if (dto.allDay) {
+            const startDate = dto.start.slice(0, 10);
+            let endDate = dto.end ? dto.end.slice(0, 10) : this.addDays(startDate, 1);
+            if (endDate <= startDate) {
+                endDate = this.addDays(startDate, 1);
+            }
+            return {
+                summary: dto.title,
+                description: dto.description,
+                location: dto.location,
+                start: { date: startDate },
+                end: { date: endDate },
+            };
+        }
+
+        const start = new Date(dto.start);
+        const end = dto.end
+            ? new Date(dto.end)
+            : new Date(start.getTime() + 30 * 60 * 1000);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            throw new BadRequestException(
+                'Les dates de l’événement Google sont invalides.',
+            );
+        }
+
+        return {
+            summary: dto.title,
+            description: dto.description,
+            location: dto.location,
+            start: {
+                dateTime: start.toISOString(),
+                timeZone,
+            },
+            end: {
+                dateTime: end.toISOString(),
+                timeZone,
+            },
+        };
+    }
+
+    private persistGoogleEvent(
+        connection: GoogleCalendarConnection,
+        event: calendar_v3.Schema$Event,
+    ) {
+        const mapped = mapGoogleEvent(
+            event,
+            connection.id,
+            connection.calendarId,
+        );
+        return this.prisma.googleCalendarEvent.upsert({
+            where: {
+                connectionId_googleEventId: {
+                    connectionId: connection.id,
+                    googleEventId: mapped.googleEventId,
+                },
+            },
+            create: mapped,
+            update: mapped,
+        });
     }
 
     private async handleSyncError(

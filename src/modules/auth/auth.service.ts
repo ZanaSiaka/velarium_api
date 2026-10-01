@@ -59,6 +59,10 @@ export class AuthService {
       throw new UnauthorizedException('Email ou mot de passe incorrect.');
     }
 
+    if (!user.active) {
+      throw new UnauthorizedException('Ce compte est inactif.');
+    }
+
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedException('Email ou mot de passe incorrect.');

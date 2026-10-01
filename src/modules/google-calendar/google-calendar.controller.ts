@@ -1,4 +1,17 @@
-import { Controller, Delete, Get, Post, Query, Res } from '@nestjs/common';
+import {
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Logger,
+    NotFoundException,
+    BadRequestException,
+    Param,
+    Patch,
+    Post,
+    Query,
+    Res,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import {
@@ -6,12 +19,15 @@ import {
     CurrentUserPayload,
 } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { GoogleCalendarEventWriteDto } from './dto/google-calendar-event-write.dto';
 import { GoogleCalendarEventsQueryDto } from './dto/google-calendar-events-query.dto';
 import { GoogleCalendarService } from './google-calendar.service';
 
 @ApiTags('google-calendar')
 @Controller('google-calendar')
 export class GoogleCalendarController {
+    private readonly logger = new Logger(GoogleCalendarController.name);
+
     constructor(private readonly googleCalendarService: GoogleCalendarService) { }
 
     @Get('connect')
@@ -35,14 +51,22 @@ export class GoogleCalendarController {
             return;
         }
 
-        let redirectUrl: URL;
+        const redirectUrl = new URL('/settings/integrations', frontendUrl);
         try {
-            redirectUrl = new URL('/settings/integrations', frontendUrl);
             await this.googleCalendarService.handleCallback(code, state);
             redirectUrl.searchParams.set('googleCalendar', 'connected');
-        } catch {
-            redirectUrl = new URL('/settings/integrations', frontendUrl);
-            redirectUrl.searchParams.set('googleCalendar', 'error');
+        } catch (error) {
+            this.logger.error(
+                'Google Calendar OAuth callback failed',
+                error instanceof Error ? error.stack : error,
+            );
+            if (error instanceof NotFoundException) {
+                redirectUrl.searchParams.set('googleCalendar', 'user_inactive');
+            } else if (error instanceof BadRequestException) {
+                redirectUrl.searchParams.set('googleCalendar', 'oauth_failed');
+            } else {
+                redirectUrl.searchParams.set('googleCalendar', 'error');
+            }
         }
         response.redirect(redirectUrl.toString());
     }
@@ -64,6 +88,41 @@ export class GoogleCalendarController {
         @Query() query: GoogleCalendarEventsQueryDto,
     ) {
         return this.googleCalendarService.getEvents(user.id, query);
+    }
+
+    @Post('events')
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Créer un événement Google Calendar' })
+    createEvent(
+        @CurrentUser() user: CurrentUserPayload,
+        @Body() dto: GoogleCalendarEventWriteDto,
+    ) {
+        return this.googleCalendarService.createEvent(user.id, dto);
+    }
+
+    @Patch('events/:googleEventId')
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Mettre à jour un événement Google Calendar' })
+    updateEvent(
+        @CurrentUser() user: CurrentUserPayload,
+        @Param('googleEventId') googleEventId: string,
+        @Body() dto: GoogleCalendarEventWriteDto,
+    ) {
+        return this.googleCalendarService.updateEvent(
+            user.id,
+            googleEventId,
+            dto,
+        );
+    }
+
+    @Delete('events/:googleEventId')
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Supprimer un événement Google Calendar' })
+    deleteEvent(
+        @CurrentUser() user: CurrentUserPayload,
+        @Param('googleEventId') googleEventId: string,
+    ) {
+        return this.googleCalendarService.deleteEvent(user.id, googleEventId);
     }
 
     @Post('sync')
