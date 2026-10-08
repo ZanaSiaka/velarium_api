@@ -13,7 +13,7 @@ import {
     Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
+import type { Response } from 'express';
 import {
     CurrentUser,
     CurrentUserPayload,
@@ -34,7 +34,7 @@ export class GoogleCalendarController {
 
     @Get('connect')
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Obtenir l'URL de connexion Google Calendar' })
+    @ApiOperation({ summary: "Obtenir l'URL de connexion Google Calendar" })
     connect(@CurrentUser() user: CurrentUserPayload) {
         return this.googleCalendarService.getConnectUrl(user.id);
     }
