@@ -23,6 +23,8 @@ import { GoogleCalendarEventWriteDto } from './dto/google-calendar-event-write.d
 import { GoogleCalendarEventsQueryDto } from './dto/google-calendar-events-query.dto';
 import { GoogleCalendarService } from './google-calendar.service';
 
+const GOOGLE_CALENDAR_FRONTEND_URL = 'https://velaruim.vercel.app';
+
 @ApiTags('google-calendar')
 @Controller('google-calendar')
 export class GoogleCalendarController {
@@ -32,7 +34,7 @@ export class GoogleCalendarController {
 
     @Get('connect')
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Obtenir l’URL de connexion Google Calendar' })
+    @ApiOperation({ summary: 'Obtenir l'URL de connexion Google Calendar' })
     connect(@CurrentUser() user: CurrentUserPayload) {
         return this.googleCalendarService.getConnectUrl(user.id);
     }
@@ -45,13 +47,7 @@ export class GoogleCalendarController {
         @Query('state') state: string | undefined,
         @Res() response: Response,
     ) {
-        const frontendUrl = process.env.FRONTEND_URL;
-        if (!frontendUrl) {
-            response.status(500).send('Google Calendar callback is not configured.');
-            return;
-        }
-
-        const redirectUrl = new URL('/settings/integrations', frontendUrl);
+        const redirectUrl = new URL('/settings/integrations', GOOGLE_CALENDAR_FRONTEND_URL);
         try {
             await this.googleCalendarService.handleCallback(code, state);
             redirectUrl.searchParams.set('googleCalendar', 'connected');
