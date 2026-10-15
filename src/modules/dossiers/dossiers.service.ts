@@ -6,6 +6,7 @@ import {
 
 import {
   MoyenOperationCompte,
+  Prisma,
 } from '../../../generated/prisma/client';
 
 import {
@@ -1070,6 +1071,10 @@ export class DossiersService {
             );
           }
 
+          if (!avocatResponsable.active) {
+            throw new BadRequestException('Avocat responsable inactif.');
+          }
+
           // ======================================================
           // COMPTE + MOYEN DE PAIEMENT
           // ======================================================
@@ -1698,6 +1703,26 @@ export class DossiersService {
   // MODIFICATION
   // ============================================================
 
+  private async validateCollaborateurs(
+    tx: Prisma.TransactionClient,
+    ids: string[],
+  ): Promise<string[]> {
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || !id.trim())) {
+      throw new BadRequestException('Identifiants des collaborateurs invalides.');
+    }
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length > 0) {
+      const users = await tx.user.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true },
+      });
+      if (users.length !== uniqueIds.length) {
+        throw new NotFoundException('Un ou plusieurs collaborateurs sont introuvables.');
+      }
+    }
+    return uniqueIds;
+  }
+
   async update(
     id: string,
     dto: UpdateDossierDto,
@@ -1710,14 +1735,33 @@ export class DossiersService {
     const dossier =
       await this.prisma.$transaction(
         async (tx) => {
-          await tx
-            .dossierCollaborateur
-            .deleteMany({
-              where: {
-                dossierId:
-                  id,
-              },
+          if (dto.avocatResponsableId !== undefined) {
+            if (!dto.avocatResponsableId) {
+              throw new BadRequestException('Identifiant de l’avocat responsable invalide.');
+            }
+            const avocat = await tx.user.findUnique({
+              where: { id: dto.avocatResponsableId },
             });
+            if (!avocat) {
+              throw new NotFoundException('Avocat responsable introuvable.');
+            }
+            if (!avocat.active) {
+              throw new BadRequestException('Avocat responsable inactif.');
+            }
+          }
+          const collaborateurIds = dto.collaborateurIds === undefined
+            ? undefined
+            : await this.validateCollaborateurs(tx, dto.collaborateurIds);
+          if (collaborateurIds !== undefined) {
+            await tx
+              .dossierCollaborateur
+              .deleteMany({
+                where: {
+                  dossierId:
+                    id,
+                },
+              });
+          }
 
           return tx.dossier
             .update({
