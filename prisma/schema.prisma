@@ -8,6 +8,139 @@ datasource db {
   provider = "postgresql"
 }
 
+enum NaturePersonneSuivie {
+  PHYSIQUE
+  MORALE
+}
+
+enum QualificationSanction {
+  A_VERIFIER
+  CONFIRMEE
+  ECARTEE
+}
+
+enum EtatMesureSanction {
+  NON_DETERMINE
+  A_VENIR
+  EN_VIGUEUR
+  SUSPENDUE
+  EXPIREE
+  LEVEE
+  ANNULEE
+}
+
+enum ActionSanction {
+  CONFIRMER
+  ECARTER
+  REOUVRIR
+  MODIFIER_MESURE
+}
+
+model PersonneSuivie {
+  id String @id @default(cuid())
+  nature NaturePersonneSuivie
+  nom String
+  identifiantType String?
+  identifiantValeur String?
+  justificationIdentite String?
+  identiteVerifieeAt DateTime?
+  identiteVerifieeParId String?
+  identiteVerifieePar User? @relation("PersonneVerificateur", fields: [identiteVerifieeParId], references: [id], onDelete: Restrict)
+  clientId String? @unique
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdById String
+  createdBy User @relation("PersonneAuteur", fields: [createdById], references: [id], onDelete: Restrict)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  dossiers DossierPersonne[]
+  signalements SignalementSanction[]
+  historique SanctionHistorique[]
+  @@index([nom, id])
+}
+
+model DossierPersonne {
+  id String @id @default(cuid())
+  personneId String
+  personne PersonneSuivie @relation(fields: [personneId], references: [id], onDelete: Restrict)
+  dossierId String
+  dossier Dossier @relation(fields: [dossierId], references: [id], onDelete: Restrict)
+  qualite String
+  createdById String
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@unique([dossierId, personneId, qualite])
+  @@index([personneId, createdAt])
+}
+
+model SignalementSanction {
+  id String @id @default(cuid())
+  personneId String
+  personne PersonneSuivie @relation(fields: [personneId], references: [id], onDelete: Restrict)
+  qualification QualificationSanction @default(A_VERIFIER)
+  etatMesure EtatMesureSanction @default(NON_DETERMINE)
+  type String
+  source String
+  sourceUrl String?
+  autorite String?
+  referenceDecision String?
+  description String
+  dateDecision DateTime? @db.Date
+  dateDecisionApplicable Boolean @default(true)
+  motifDateDecisionAbsente String?
+  dateDebut DateTime? @db.Date
+  dateFin DateTime? @db.Date
+  createdById String
+  createdBy User @relation("SanctionAuteur", fields: [createdById], references: [id], onDelete: Restrict)
+  verifiedById String?
+  verifiedBy User? @relation("SanctionVerificateur", fields: [verifiedById], references: [id], onDelete: Restrict)
+  verifiedAt DateTime?
+  justificatifId String?
+  justificatif SanctionPiece? @relation("SanctionJustificatif", fields: [justificatifId, id], references: [id, signalementId], onDelete: Restrict, onUpdate: NoAction)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  pieces SanctionPiece[]
+  historique SanctionHistorique[]
+  @@index([personneId, createdAt, id])
+  @@index([qualification, etatMesure])
+}
+
+model SanctionHistorique {
+  id String @id @default(cuid())
+  personneId String
+  personne PersonneSuivie @relation(fields: [personneId], references: [id], onDelete: Restrict)
+  signalementId String?
+  signalement SignalementSanction? @relation(fields: [signalementId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  action String
+  motif String
+  version Int
+  snapshot Json
+  createdAt DateTime @default(now())
+  @@index([signalementId, createdAt, id])
+  @@index([personneId, createdAt, id])
+}
+
+model SanctionPiece {
+  id String @id @default(cuid())
+  signalementId String
+  signalement SignalementSanction @relation(fields: [signalementId], references: [id], onDelete: Restrict)
+  justifie SignalementSanction[] @relation("SanctionJustificatif")
+  storageKey String @unique
+  mimeType String
+  taille Int
+  sha256 String
+  referenceSource String
+  uploadedById String
+  uploadedBy User @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@index([signalementId, createdAt, id])
+  @@unique([id, signalementId])
+}
+
+
 model User {
   id String @id @default(cuid())
 
@@ -30,6 +163,16 @@ model User {
   updatedAt DateTime @updatedAt
 
   active Boolean @default(true)
+
+  clientImports ClientImport[]
+
+  personnesSuiviesCreees PersonneSuivie[] @relation("PersonneAuteur")
+  personnesIdentifiees PersonneSuivie[] @relation("PersonneVerificateur")
+  sanctionsCreees SignalementSanction[] @relation("SanctionAuteur")
+  sanctionsVerifiees SignalementSanction[] @relation("SanctionVerificateur")
+  sanctionsHistoriques SanctionHistorique[]
+  sanctionsPieces SanctionPiece[]
+  liensPersonnes DossierPersonne[]
 
   activityLogs ActivityLog[]
 
@@ -140,15 +283,43 @@ model Client {
 
   adresse String?
 
+  numeroContribuable String?
+
   notes String?
 
   createdAt DateTime @default(now())
 
   updatedAt DateTime @updatedAt
 
+  importIdentities ClientImportIdentity[]
+
+  personneSuivie PersonneSuivie?
+
   dossiers Dossier[]
 
   factures Facture[]
+}
+
+// Confirmation ledger only: previews never write to the database.
+model ClientImport {
+  id String @id
+  ownerId String
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  fileHash String @unique
+  report Json
+  createdAt DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+}
+
+// Hashes of normalized business identities; concurrent imports cannot claim the same identity.
+model ClientImportIdentity {
+  key String @id
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
 }
 
 model Dossier {
@@ -195,6 +366,8 @@ model Dossier {
   typeDossier String?
 
   activityLogs ActivityLog[]
+
+  personnesSuivies DossierPersonne[]
 
   conventionsHonoraires ConventionHonoraires[]
 

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
   S3Client,
   PutObjectCommand,
@@ -12,6 +12,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 // en renseignant S3_ENDPOINT.
 @Injectable()
 export class S3Service {
+  private assertGenericKey(key: string) {
+    if (key.startsWith('sanctions-private/')) throw new ForbiddenException('Pièce accessible uniquement par son module dédié.');
+  }
   private readonly client: S3Client;
   private readonly bucket: string;
 
@@ -38,6 +41,7 @@ export class S3Service {
   }
 
   getUploadUrl(key: string, contentType: string) {
+    this.assertGenericKey(key);
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -47,6 +51,7 @@ export class S3Service {
   }
 
   getDownloadUrl(key: string) {
+    this.assertGenericKey(key);
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -55,6 +60,7 @@ export class S3Service {
   }
 
   getViewUrl(key: string) {
+    this.assertGenericKey(key);
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -67,6 +73,7 @@ export class S3Service {
   }
 
   async deleteObject(key: string) {
+    this.assertGenericKey(key);
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );

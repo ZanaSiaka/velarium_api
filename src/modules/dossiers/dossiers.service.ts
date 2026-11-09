@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -25,11 +26,16 @@ import {
   UpdateDossierDto,
 } from './dto/update-dossier.dto';
 
+import { validateSync } from 'class-validator';
+
+import { FinancePermissionService } from '../finance/finance-permission.service';
+
 @Injectable()
 export class DossiersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
+    private readonly financePermissions: FinancePermissionService,
   ) { }
 
   // ============================================================
@@ -950,28 +956,12 @@ export class DossiersService {
     userId: string,
   ) {
 
-    console.log(
-      '========== CREATE DOSSIER ==========',
-    );
+    if (dto.fraisOuvertureRegles !== true) {
+      throw new BadRequestException(
+        'Les frais d’ouverture doivent être réglés et encaissés lors de la création du dossier.',
+      );
+    }
 
-    console.log(
-      'MONTANT RECU PAR NEST =',
-      dto.montantFraisOuverture,
-    );
-
-    console.log(
-      'TYPE MONTANT =',
-      typeof dto.montantFraisOuverture,
-    );
-
-    console.log(
-      'FRAIS REGLES =',
-      dto.fraisOuvertureRegles,
-    );
-
-    console.log(
-      '=====================================',
-    );
     // ============================================================
     // VALIDATION MONTANT
     // ============================================================
@@ -1032,6 +1022,17 @@ export class DossiersService {
     const dossier =
       await this.prisma.$transaction(
         async (tx) => {
+          // Apply the same account and movement permissions as the Finance module.
+          const encaisseur = await tx.user.findUnique({ where: { id: userId } });
+          if (!encaisseur?.active) {
+            throw new ForbiddenException('Utilisateur d’encaissement absent ou inactif.');
+          }
+          this.financePermissions.require(
+            this.financePermissions.canViewCaisses(encaisseur.role) &&
+            this.financePermissions.canCreateMouvement(encaisseur.role),
+            'Vous n’avez pas les permissions nécessaires pour encaisser les frais d’ouverture.',
+          );
+
           // ======================================================
           // CLIENT
           // ======================================================
@@ -1269,6 +1270,10 @@ export class DossiersService {
           // CREATION DOSSIER
           // ======================================================
 
+          const collaborateurIds = await this.validateCollaborateurs(
+            tx, dto.collaborateurIds === undefined ? [] : dto.collaborateurIds,
+          );
+
           const createdDossier =
             await tx.dossier.create({
               data: {
@@ -1328,8 +1333,7 @@ export class DossiersService {
 
                 collaborateurs: {
                   create: (
-                    dto.collaborateurIds ??
-                    []
+                    collaborateurIds
                   ).map(
                     (
                       collaborateurId,
@@ -1803,41 +1807,32 @@ export class DossiersService {
                   null,
 
                 avocatClientTelephone:
-                  dto.avocatClientTelephone ||
-                  null,
+                  dto.avocatClientTelephone === undefined
+                    ? undefined
+                    : dto.avocatClientTelephone?.trim() || null,
 
                 juridiction:
-                  dto.juridiction ||
-                  null,
+                  dto.juridiction === undefined
+                    ? undefined
+                    : dto.juridiction?.trim() || null,
 
                 partieAdverse:
-                  dto.partieAdverse ||
-                  null,
+                  dto.partieAdverse === undefined
+                    ? undefined
+                    : dto.partieAdverse?.trim() || null,
 
-                kycSoupcon:
-                  dto.kycSoupcon ??
-                  false,
+                kycSoupcon: dto.kycSoupcon,
 
                 declarationSoupcon:
-                  dto.kycSoupcon
-                    ? dto
-                      .declarationSoupcon ||
-                    null
-                    : null,
+                  dto.declarationSoupcon === undefined
+                    ? undefined
+                    : dto.declarationSoupcon?.trim() || null,
 
-                collaborateurs: {
-                  create: (
-                    dto.collaborateurIds ??
-                    []
-                  ).map(
-                    (
-                      collaboratorId,
-                    ) => ({
-                      userId:
-                        collaboratorId,
-                    }),
-                  ),
-                },
+                collaborateurs: collaborateurIds === undefined
+                  ? undefined
+                  : {
+                    create: collaborateurIds.map((userId) => ({ userId })),
+                  },
               },
             });
         },

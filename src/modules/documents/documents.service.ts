@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { PrismaService } from '../../prisma/prisma.service';
@@ -23,7 +23,7 @@ export class DocumentsService {
 
   findAll(dossierId?: string) {
     return this.prisma.document.findMany({
-      where: dossierId ? { dossierId } : undefined,
+      where: { ...(dossierId ? { dossierId } : {}), NOT: { storageKey: { startsWith: 'sanctions-private/' } } },
       orderBy: { createdAt: 'desc' },
       include: { dossier: true, uploadedBy: true },
     });
@@ -38,10 +38,13 @@ export class DocumentsService {
       throw new NotFoundException('Document introuvable.');
     }
 
+    if (document.storageKey.startsWith('sanctions-private/')) throw new ForbiddenException('Pièce accessible uniquement par son module dédié.');
+
     return document;
   }
 
   async create(dto: CreateDocumentDto, uploadedById: string) {
+    if (dto.storageKey.startsWith('sanctions-private/')) throw new ForbiddenException('Pièce accessible uniquement par son module dédié.');
     const document = await this.prisma.document.create({
       data: {
         nom: dto.nom,

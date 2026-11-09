@@ -1,5 +1,8 @@
+import { KycDeclarationValidator } from './kyc-declaration.validator';
 import {
   IsArray,
+  Validate,
+  ValidateIf,
   IsBoolean,
   IsDateString,
   IsEmail,
@@ -8,8 +11,8 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  Min,
-  ValidateIf,
+  IsPositive,
+  Equals,
 } from 'class-validator';
 
 import { Type } from 'class-transformer';
@@ -52,26 +55,26 @@ export class CreateDossierDto {
   avocatResponsableId: string;
 
   // ============================================================
-  // AVOCAT DU CLIENT
+  // COORDONNEES HISTORIQUES : libelle UI avocat adverse, cles API conservees
   // ============================================================
 
   @IsOptional()
   @IsString()
-  avocatClientNom?: string;
+  avocatClientNom?: string | null;
 
   @IsOptional()
   @IsEmail()
-  avocatClientEmail?: string;
+  avocatClientEmail?: string | null;
 
   @IsOptional()
   @IsString()
-  avocatClientTelephone?: string;
+  avocatClientTelephone?: string | null;
 
   // ============================================================
   // COLLABORATEURS
   // ============================================================
 
-  @IsOptional()
+  @ValidateIf((_dto, value) => value !== undefined)
   @IsArray()
   @IsString({
     each: true,
@@ -84,11 +87,11 @@ export class CreateDossierDto {
 
   @IsOptional()
   @IsString()
-  juridiction?: string;
+  juridiction?: string | null;
 
   @IsOptional()
   @IsString()
-  partieAdverse?: string;
+  partieAdverse?: string | null;
 
   // ============================================================
   // KYC
@@ -97,9 +100,8 @@ export class CreateDossierDto {
   @IsBoolean()
   kycSoupcon: boolean;
 
-  @IsOptional()
-  @IsString()
-  declarationSoupcon?: string;
+  @Validate(KycDeclarationValidator)
+  declarationSoupcon?: string | null;
 
   // ============================================================
   // FRAIS D'OUVERTURE
@@ -115,43 +117,35 @@ export class CreateDossierDto {
    */
   @Type(() => Number)
   @IsNumber()
-  @Min(1)
+  @IsPositive()
   montantFraisOuverture: number;
 
   /**
    * true :
    * le montant a réellement été encaissé.
    *
-   * false :
-   * le montant reste à payer.
+   * false est refusé lors de la création.
    */
   @IsBoolean()
+  @Equals(true, { message: 'Les frais d’ouverture doivent être réglés lors de la création du dossier.' })
   fraisOuvertureRegles: boolean;
 
   // ============================================================
   // COMPTE D'ENCAISSEMENT
-  // Obligatoire uniquement si les frais sont payés
+  // Obligatoire lors de la création
   // ============================================================
 
-  @ValidateIf(
-    (dto: CreateDossierDto) =>
-      dto.fraisOuvertureRegles === true,
-  )
   @IsNotEmpty()
   @IsString()
-  caisseIdFraisOuverture?: string;
+  caisseIdFraisOuverture: string;
 
   // ============================================================
   // MOYEN DE PAIEMENT
   // ============================================================
 
-  @ValidateIf(
-    (dto: CreateDossierDto) =>
-      dto.fraisOuvertureRegles === true,
-  )
   @IsNotEmpty()
   @IsEnum(MoyenOperationCompte)
-  moyenPaiementFraisOuverture?: MoyenOperationCompte;
+  moyenPaiementFraisOuverture: MoyenOperationCompte;
 
   // ============================================================
   // REFERENCE PAIEMENT

@@ -19,4 +19,5 @@ export class UpdateDossierDto extends PartialType(
             'datePaiementFraisOuverture',
         ] as const,
     ),
+    { skipNullProperties: false },
 ) { }

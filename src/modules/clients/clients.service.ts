@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ClientType } from '../../../generated/prisma/client';
+import { validateSync } from 'class-validator';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../../prisma/prisma.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -173,9 +175,16 @@ export class ClientsService {
   }
 
   async create(dto: CreateClientDto, userId: string) {
+    const errors = validateSync(Object.assign(new CreateClientDto(), dto));
+    if (errors.length > 0) throw new BadRequestException(errors);
+    const numeroContribuable = dto.numeroContribuable?.trim() || null;
+    if (numeroContribuable && dto.type !== ClientType.ENTREPRISE) {
+      throw new BadRequestException('Le numéro contribuable est réservé aux entreprises.');
+    }
     const client = await this.prisma.client.create({
       data: {
         type: dto.type,
+        numeroContribuable,
         nom: dto.nom,
         email: dto.email || null,
         telephone: dto.telephone || null,
@@ -196,17 +205,29 @@ export class ClientsService {
   }
 
   async update(id: string, dto: UpdateClientDto) {
-    await this.findOne(id);
+    const errors = validateSync(Object.assign(new UpdateClientDto(), dto));
+    if (errors.length > 0) {
+      throw new BadRequestException(errors);
+    }
+    const current = await this.findOne(id);
+    const numeroContribuable = dto.numeroContribuable === undefined
+      ? undefined : dto.numeroContribuable?.trim() || null;
+    if ((dto.type !== undefined || numeroContribuable !== undefined) &&
+        (dto.type ?? current.type) !== ClientType.ENTREPRISE &&
+        (numeroContribuable === undefined ? current.numeroContribuable : numeroContribuable)) {
+      throw new BadRequestException('Le numéro contribuable est réservé aux entreprises. Effacez-le explicitement pour changer de type.');
+    }
 
     return this.prisma.client.update({
       where: { id },
       data: {
         type: dto.type,
+        numeroContribuable,
         nom: dto.nom,
-        email: dto.email || null,
-        telephone: dto.telephone || null,
-        adresse: dto.adresse || null,
-        notes: dto.notes || null,
+        email: dto.email === undefined ? undefined : dto.email || null,
+        telephone: dto.telephone === undefined ? undefined : dto.telephone || null,
+        adresse: dto.adresse === undefined ? undefined : dto.adresse || null,
+        notes: dto.notes === undefined ? undefined : dto.notes || null,
       },
     });
   }

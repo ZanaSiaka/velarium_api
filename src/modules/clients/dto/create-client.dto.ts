@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
 import { ClientType } from '../../../../generated/prisma/client';
 
 export class CreateClientDto {
@@ -6,18 +6,27 @@ export class CreateClientDto {
   type: ClientType;
 
   @IsNotEmpty()
+  @IsString()
+  @Matches(/\S/)
   nom: string;
 
   @IsOptional()
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
   @IsOptional()
-  telephone?: string;
+  @IsString()
+  telephone?: string | null;
 
   @IsOptional()
-  adresse?: string;
+  @IsString()
+  adresse?: string | null;
 
   @IsOptional()
-  notes?: string;
+  @IsString()
+  numeroContribuable?: string | null;
+
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
 }

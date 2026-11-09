@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SanctionsModule } from './modules/sanctions/sanctions.module';
 import { APP_GUARD } from '@nestjs/core';
 
 import { RecusModule } from './modules/recus/recus.module';
@@ -23,6 +24,7 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { GoogleCalendarModule } from './modules/google-calendar/google-calendar.module';
 @Module({
   imports: [
+    SanctionsModule,
     PrismaModule,
     AuthModule,
     UsersModule,
