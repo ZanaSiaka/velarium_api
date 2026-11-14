@@ -11,6 +11,7 @@ import { Type } from 'class-transformer';
 
 import {
     CategorieFinance,
+    MoyenOperationCompte,
     SourceMouvementFinance,
     TypeMouvementFinance,
 } from '../../../../generated/prisma/client';
@@ -26,6 +27,10 @@ export class CreateMouvementDto {
 
     @IsEnum(CategorieFinance)
     categorie: CategorieFinance;
+
+    @IsOptional()
+    @IsEnum(MoyenOperationCompte)
+    moyenPaiement?: MoyenOperationCompte;
 
     @IsString()
     caisseId: string;

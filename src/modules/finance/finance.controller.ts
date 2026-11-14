@@ -1,5 +1,7 @@
 import {
     Body,
+    DefaultValuePipe,
+    ParseBoolPipe,
     Controller,
     Delete,
     Get,
@@ -22,6 +24,7 @@ import {
 import {
     FinanceService,
 } from './finance.service';
+import { FinancePermissionService } from './finance-permission.service';
 
 import {
     FinanceAttachmentsService,
@@ -57,7 +60,13 @@ export class FinanceController {
 
         private readonly financeAttachmentsService:
             FinanceAttachmentsService,
+        private readonly financePermissions: FinancePermissionService,
     ) { }
+
+    @Get('permissions')
+    getPermissions(@CurrentUser() user: CurrentUserPayload) {
+        return this.financePermissions.getFinancePermissions(user.role);
+    }
 
     // ============================================================
     // DASHBOARD
@@ -192,6 +201,9 @@ export class FinanceController {
         @Query('dateFin')
         dateFin?:
             string,
+
+        @Query('categorie') categorie?: string,
+        @Query('avecTotaux', new DefaultValuePipe(false), ParseBoolPipe) avecTotaux?: boolean,
     ) {
         return this.financeService.findMouvements(
             user.role,
@@ -201,6 +213,8 @@ export class FinanceController {
                 type,
                 dateDebut,
                 dateFin,
+                categorie,
+                avecTotaux,
             },
         );
     }

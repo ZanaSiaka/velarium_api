@@ -379,11 +379,12 @@ export class FacturesService {
   // LISTE
   // ============================================================
 
-  async findAll() {
+  async findAll(dossierId?: string) {
     const factures =
       await this.prisma
         .facture
         .findMany({
+          where: dossierId === undefined ? undefined : { dossierId },
           orderBy: {
             createdAt:
               'desc',

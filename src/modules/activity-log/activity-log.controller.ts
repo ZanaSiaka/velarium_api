@@ -1,7 +1,9 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Header, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { ActivityLogService } from './activity-log.service';
+import { CurrentUser, CurrentUserPayload } from '../../common/decorators/current-user.decorator';
+import { ActivityLogQueryDto } from './dto/dossier-history-query.dto';
 
 @ApiTags('activity-log')
 @ApiBearerAuth()
@@ -10,7 +12,8 @@ export class ActivityLogController {
   constructor(private readonly activityLogService: ActivityLogService) {}
 
   @Get()
-  findAll(@Query('dossierId') dossierId?: string, @Query('userId') userId?: string) {
-    return this.activityLogService.findAll({ dossierId, userId });
+  @Header('Cache-Control', 'private, no-store')
+  findAll(@CurrentUser() user: CurrentUserPayload, @Query() query: ActivityLogQueryDto) {
+    return this.activityLogService.findAll(user.id, query);
   }
 }

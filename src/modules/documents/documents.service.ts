@@ -25,7 +25,7 @@ export class DocumentsService {
     return this.prisma.document.findMany({
       where: { ...(dossierId ? { dossierId } : {}), NOT: { storageKey: { startsWith: 'sanctions-private/' } } },
       orderBy: { createdAt: 'desc' },
-      include: { dossier: true, uploadedBy: true },
+      include: { dossier: true, uploadedBy: { select: { id: true, name: true } } },
     });
   }
 

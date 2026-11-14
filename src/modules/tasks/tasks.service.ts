@@ -148,14 +148,13 @@ export class TasksService {
     async findAll(
         userId: string,
         role: string,
+        dossierId?: string,
     ) {
         return this.prisma.tache.findMany({
-            where:
-                role === 'AVOCAT'
-                    ? undefined
-                    : {
-                        assigneAId: userId,
-                    },
+            where: {
+                ...(role === 'AVOCAT' ? {} : { assigneAId: userId }),
+                ...(dossierId === undefined ? {} : { dossierId }),
+            },
 
             orderBy: [
                 {

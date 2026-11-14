@@ -6,6 +6,7 @@ import {
     Param,
     Patch,
     Post,
+    Query,
 } from '@nestjs/common';
 
 import {
@@ -56,10 +57,12 @@ export class TasksController {
     @Get()
     findAll(
         @CurrentUser() user: CurrentUserPayload,
+        @Query('dossierId') dossierId?: string,
     ) {
         return this.tasksService.findAll(
             user.id,
             user.role,
+            dossierId,
         );
     }
 

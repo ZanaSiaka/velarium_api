@@ -2,9 +2,11 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common'
 
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
@@ -17,6 +19,10 @@ import {
 import { DossiersService } from './dossiers.service'
 import { CreateDossierDto } from './dto/create-dossier.dto'
 import { UpdateDossierDto } from './dto/update-dossier.dto'
+import { Roles } from '../../common/decorators/roles.decorator'
+import { Role } from '../../../generated/prisma/client'
+import { ActivityLogService } from '../activity-log/activity-log.service'
+import { DossierHistoryQueryDto } from '../activity-log/dto/dossier-history-query.dto'
 
 @ApiTags('dossiers')
 @ApiBearerAuth()
@@ -24,6 +30,7 @@ import { UpdateDossierDto } from './dto/update-dossier.dto'
 export class DossiersController {
   constructor(
     private readonly dossiersService: DossiersService,
+    private readonly activityLogService: ActivityLogService,
   ) { }
 
   // ============================================================
@@ -49,8 +56,23 @@ export class DossiersController {
   // ============================================================
 
   @Get(':id/livre-paiements')
-  getLivrePaiements(@Param('id') id: string) {
-    return this.dossiersService.getLivrePaiements(id)
+  @Header('Cache-Control', 'private, no-store')
+  getLivrePaiements(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.dossiersService.getLivrePaiements(id, user.role)
+  }
+
+  @Get(':id/historique')
+  @Roles(Role.AVOCAT)
+  @Header('Cache-Control', 'private, no-store')
+  async history(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: DossierHistoryQueryDto,
+  ) {
+    await this.activityLogService.assertDossierHistoryAccess(user.id)
+    // Reuse current dossier access rules; do not add an assignment restriction.
+    await this.dossiersService.findOne(id)
+    return this.activityLogService.findDossierHistory(id, user.id, query)
   }
   @Get('frais-ouverture')
   findFraisOuverture() {

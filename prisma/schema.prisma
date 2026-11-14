@@ -1242,6 +1242,10 @@ enum CategorieFinance {
   IMPOTS_TAXES
 
   AUTRE
+
+  RESTAURATION
+  COMMUNICATION
+  IMPRESSION_PHOTOCOPIE
 }
 
 enum TypeRecuEncaissement {

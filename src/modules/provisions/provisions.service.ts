@@ -1,3 +1,4 @@
+import { readProvisionBalance } from '../../common/finance/financial-read';
 import {
   BadRequestException,
   Injectable,
@@ -225,29 +226,13 @@ export class ProvisionsService {
             provision.montant,
           );
 
-        const montantImpute =
-          provision.imputations
-            .reduce(
-              (
-                total,
-                imputation,
-              ) =>
-                total +
-                num(
-                  imputation.montant,
-                ),
-              0,
-            );
-
-        const montantDisponible =
-          Math.max(
-            montant -
-            montantImpute,
-            0,
-          );
+        const lectureFinanciere = readProvisionBalance(provision);
+        const montantImpute = lectureFinanciere.montantImpute === null ? null : Number(lectureFinanciere.montantImpute);
+        const montantDisponible = lectureFinanciere.montantDisponible === null ? null : Number(lectureFinanciere.montantDisponible);
 
         return {
           ...provision,
+          lectureFinanciere,
 
           montant,
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, CurrentUserPayload } from '../../common/decorators/current-user.decorator';
@@ -13,8 +13,8 @@ export class FacturesController {
   constructor(private readonly facturesService: FacturesService) {}
 
   @Get()
-  findAll() {
-    return this.facturesService.findAll();
+  findAll(@Query('dossierId') dossierId?: string) {
+    return this.facturesService.findAll(dossierId);
   }
 
   @Get(':id')

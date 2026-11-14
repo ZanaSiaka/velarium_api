@@ -29,6 +29,8 @@ import {
 } from './dto/create-mouvement.dto';
 import {
     MoyenOperationCompte,
+    CategorieFinance,
+    Prisma,
     Role,
     SourceMouvementFinance,
     TypeCaisse,
@@ -1121,6 +1123,8 @@ export class FinanceService {
 
             dateDebut?: string;
             dateFin?: string;
+            categorie?: string;
+            avecTotaux?: boolean;
         },
     ) {
         this.permissions.require(
@@ -1130,8 +1134,11 @@ export class FinanceService {
             'Vous n’avez pas les permissions nécessaires pour consulter les mouvements financiers.',
         );
 
-        const where:
-            any = {};
+        const where: Prisma.MouvementFinanceWhereInput = {};
+        if (options?.categorie) {
+            if (!Object.values(CategorieFinance).includes(options.categorie as CategorieFinance)) throw new BadRequestException('Catégorie financière invalide.');
+            where.categorie = options.categorie as CategorieFinance;
+        }
 
         if (
             options?.caisseId
@@ -1241,6 +1248,7 @@ export class FinanceService {
 
                             type:
                                 true,
+                            devise: true,
                         },
                     },
 
@@ -1254,6 +1262,7 @@ export class FinanceService {
 
                             type:
                                 true,
+                            devise: true,
                         },
                     },
 
@@ -1282,18 +1291,20 @@ export class FinanceService {
                 },
             });
 
-        return mouvements.map(
-            (
-                mouvement,
-            ) => ({
-                ...mouvement,
+        const items = mouvements.map(mouvement => ({
+            ...mouvement, montant: Number(mouvement.montant), montantExact: mouvement.montant.toFixed(2),
+        }));
+        if (!options?.avecTotaux) return items;
+        // Same filtered result, one query; no frontend floating-point sums.
+        const totals = new Map<string, Prisma.Decimal>();
+        let sansDevise = 0;
+        for (const row of mouvements) {
+            const devise = row.caisse.devise?.trim();
+            if (!devise) { sansDevise++; continue; }
+            totals.set(devise, (totals.get(devise) ?? new Prisma.Decimal(0)).plus(row.montant));
+        }
+        return { items, totauxParDevise: [...totals].map(([devise, montant]) => ({ devise, montant: montant.toFixed(2) })), sansDevise };
 
-                montant:
-                    Number(
-                        mouvement.montant,
-                    ),
-            }),
-        );
     }
 
     // ============================================================
@@ -1438,6 +1449,19 @@ export class FinanceService {
             throw new BadRequestException(
                 'Ce compte est désactivé.',
             );
+        }
+
+        if (dto.moyenPaiement) {
+            const configured = caisse.moyensOperation?.length ? caisse.moyensOperation : this.getDefaultMoyensOperation(caisse.type);
+            const allowed: MoyenOperationCompte[] = configured.flatMap(method => method === MoyenOperationCompte.CARTE
+                ? [MoyenOperationCompte.PAIEMENT_CARTE]
+                : method === MoyenOperationCompte.MOBILE_MONEY
+                  ? [MoyenOperationCompte.ORANGE_MONEY, MoyenOperationCompte.WAVE, MoyenOperationCompte.MTN_MONEY, MoyenOperationCompte.MOOV_MONEY]
+                  : [method]);
+            if (!allowed.includes(dto.moyenPaiement)) throw new BadRequestException('Ce moyen de paiement n’est pas autorisé pour ce compte.');
+        }
+        if (dto.type === 'SORTIE' && dto.dossierId && dto.categorie === CategorieFinance.AUTRE && !dto.description?.trim()) {
+            throw new BadRequestException('Veuillez préciser la nature de cette autre dépense.');
         }
 
         // ============================================================
@@ -1588,6 +1612,8 @@ export class FinanceService {
 
                     source:
                         sourceMouvement,
+
+                    moyenPaiement: dto.moyenPaiement ?? null,
 
                     sourceLibelle,
 

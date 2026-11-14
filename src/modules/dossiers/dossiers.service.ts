@@ -7,6 +7,7 @@ import {
 
 import {
   MoyenOperationCompte,
+  Role,
   Prisma,
 } from '../../../generated/prisma/client';
 
@@ -29,6 +30,8 @@ import {
 import { validateSync } from 'class-validator';
 
 import { FinancePermissionService } from '../finance/finance-permission.service';
+
+import { readDossierFinance } from './dossier-finance-read';
 
 @Injectable()
 export class DossiersService {
@@ -56,7 +59,7 @@ export class DossiersService {
         include: {
           client: true,
 
-          avocatResponsable: true,
+          avocatResponsable: { select: { id: true, name: true } },
 
           fraisOuverture: {
             select: {
@@ -142,7 +145,7 @@ export class DossiersService {
         include: {
           client: true,
 
-          avocatResponsable: true,
+          avocatResponsable: { select: { id: true, name: true } },
 
           fraisOuverture: {
             select: {
@@ -218,7 +221,9 @@ export class DossiersService {
 
   async getLivrePaiements(
     id: string,
+    role?: Role,
   ) {
+    this.financePermissions.require(!!role && this.financePermissions.canViewFinance(role), 'Accès financier non autorisé.');
     const dossier =
       await this.prisma.dossier.findUnique({
         where: {
@@ -257,6 +262,7 @@ export class DossiersService {
 
             include: {
               paiements: {
+                include: { mouvementFinance: { include: { caisse: true, recuEncaissement: true } } },
                 orderBy: {
                   datePaiement:
                     'asc',
@@ -351,488 +357,46 @@ export class DossiersService {
       );
     }
 
-    // ============================================================
-    // TOTAL DES FACTURES
-    // ============================================================
-
-    const totalFacture =
-      dossier.factures.reduce(
-        (
-          total,
-          facture,
-        ) =>
-          total +
-          Number(
-            facture.montantTTC,
-          ),
-        0,
-      );
-
-    // ============================================================
-    // PAIEMENTS REELS DE FACTURES
-    // ============================================================
-
-    const totalPaiements =
-      dossier.factures.reduce(
-        (
-          total,
-          facture,
-        ) =>
-          total +
-          facture.paiements.reduce(
-            (
-              paiementTotal,
-              paiement,
-            ) =>
-              paiementTotal +
-              Number(
-                paiement.montant,
-              ),
-            0,
-          ),
-        0,
-      );
-
-    // ============================================================
-    // PROVISIONS ENCAISSEES
-    //
-    // Argent réellement reçu par le cabinet.
-    // Une provision reste encaissée même si elle n'est
-    // pas encore totalement imputée.
-    // ============================================================
-
-    const totalProvisionsEncaissees =
-      dossier.provisions.reduce(
-        (
-          total,
-          provision,
-        ) =>
-          total +
-          Number(
-            provision.montant,
-          ),
-        0,
-      );
-
-    // ============================================================
-    // PROVISIONS IMPUTEES
-    //
-    // Seules ces sommes diminuent le solde des factures.
-    // ============================================================
-
-    const totalProvisionsImputees =
-      dossier.factures.reduce(
-        (
-          total,
-          facture,
-        ) =>
-          total +
-          facture
-            .imputationsProvision
-            .reduce(
-              (
-                imputationTotal,
-                imputation,
-              ) =>
-                imputationTotal +
-                Number(
-                  imputation.montant,
-                ),
-              0,
-            ),
-        0,
-      );
-
-    // ============================================================
-    // ANCIENNES PROVISIONS
-    //
-    // Compatibilité temporaire avec les anciennes données
-    // où Provision.factureId était utilisé directement.
-    // ============================================================
-
-    const totalProvisionsLegacy =
-      dossier.factures.reduce(
-        (
-          total,
-          facture,
-        ) =>
-          total +
-          facture.provisions.reduce(
-            (
-              provisionTotal,
-              provision,
-            ) =>
-              provisionTotal +
-              Number(
-                provision.montant,
-              ),
-            0,
-          ),
-        0,
-      );
-
-    // ============================================================
-    // TOTAL PROVISIONS AFFECTEES AUX FACTURES
-    // ============================================================
-
-    const totalProvisions =
-      totalProvisionsImputees +
-      totalProvisionsLegacy;
-
-    // ============================================================
-    // PROVISIONS ENCORE DISPONIBLES
-    // ============================================================
-
-    const totalProvisionsDisponibles =
-      Math.max(
-        totalProvisionsEncaissees -
-        totalProvisions,
-        0,
-      );
-
-    // ============================================================
-    // FRAIS D'OUVERTURE DEJA ENCAISSES
-    //
-    // Ils restent indépendants des provisions.
-    // ============================================================
-
-    const totalFraisOuvertureEncaisse =
-      dossier.fraisOuverture?.statut ===
-        'PAYE'
-        ? Number(
-          dossier
-            .fraisOuverture
-            .montant,
-        )
-        : 0;
-
-    // ============================================================
-    // TOTAL REGLE SUR LES FACTURES
-    //
-    // IMPORTANT :
-    //
-    // On ne prend PAS toutes les provisions encaissées.
-    // On prend uniquement :
-    //
-    // paiements
-    // + provisions imputées
-    // + provisions legacy déjà affectées
-    // ============================================================
-
-    const totalRegleFactures =
-      totalPaiements +
-      totalProvisions;
-
-    // ============================================================
-    // TOTAL ENCAISSE HORS FRAIS D'OUVERTURE
-    //
-    // Ici on parle réellement de trésorerie reçue.
-    // ============================================================
-
-    const totalEncaisse =
-      totalPaiements +
-      totalProvisionsEncaissees;
-
-    // ============================================================
-    // TOTAL ENCAISSE GLOBAL DU DOSSIER
-    // ============================================================
-
-    const totalEncaisseGlobal =
-      totalEncaisse +
-      totalFraisOuvertureEncaisse;
-
-    // ============================================================
-    // RESTE A PAYER SUR LES FACTURES
-    // ============================================================
-
-    const resteAPayer =
-      Math.max(
-        totalFacture -
-        totalRegleFactures,
-        0,
-      );
-
-    // ============================================================
-    // TROP-PERCU SUR LES FACTURES
-    //
-    // Une provision non imputée n'est PAS un trop-perçu
-    // de facture.
-    // ============================================================
-
-    const tropPercu =
-      Math.max(
-        totalRegleFactures -
-        totalFacture,
-        0,
-      );
-
-    // ============================================================
-    // HISTORIQUE DES OPERATIONS
-    // ============================================================
-
+    const consolidation = readDossierFinance(dossier);
     const operations = [
-      // ----------------------------------------------------------
-      // PAIEMENTS
-      // ----------------------------------------------------------
-
-      ...dossier.factures.flatMap(
-        (
-          facture,
-        ) =>
-          facture.paiements.map(
-            (
-              paiement,
-            ) => ({
-              id:
-                paiement.id,
-
-              type:
-                'PAIEMENT' as const,
-
-              date:
-                paiement
-                  .datePaiement,
-
-              montant:
-                Number(
-                  paiement.montant,
-                ),
-
-              moyenPaiement:
-                paiement
-                  .moyenPaiement,
-
-              note:
-                paiement.note,
-
-              facture: {
-                id:
-                  facture.id,
-
-                numero:
-                  facture.numero,
-
-                montantTTC:
-                  Number(
-                    facture
-                      .montantTTC,
-                  ),
-              },
-
-              recu:
-                null,
-            }),
-          ),
-      ),
-
-      // ----------------------------------------------------------
-      // PROVISIONS
-      // ----------------------------------------------------------
-
-      ...dossier.provisions.map(
-        (
-          provision,
-        ) => {
-          const montant =
-            Number(
-              provision.montant,
-            );
-
-          const montantImpute =
-            provision.imputations.reduce(
-              (
-                total,
-                imputation,
-              ) =>
-                total +
-                Number(
-                  imputation.montant,
-                ),
-              0,
-            );
-
-          const montantDisponible =
-            Math.max(
-              montant -
-              montantImpute,
-              0,
-            );
-
-          return {
-            id:
-              provision.id,
-
-            type:
-              'PROVISION' as const,
-
-            date:
-              provision
-                .datePaiement,
-
-            montant,
-
-            moyenPaiement:
-              provision
-                .mouvementFinance
-                ?.moyenPaiement ??
-              provision
-                .moyenPaiement ??
-              null,
-
-            note:
-              provision.note,
-
-            facture:
-              null,
-
-            recu:
-              provision
-                .mouvementFinance
-                ?.recuEncaissement ??
-              null,
-
-            montantImpute,
-
-            montantDisponible,
-          };
-        },
-      ),
-
-      // ----------------------------------------------------------
-      // FRAIS D'OUVERTURE
-      // ----------------------------------------------------------
-
-      ...(dossier.fraisOuverture &&
-        dossier.fraisOuverture.statut ===
-        'PAYE'
-        ? [
-          {
-            id:
-              dossier
-                .fraisOuverture
-                .id,
-
-            type:
-              'FRAIS_OUVERTURE' as const,
-
-            date:
-              dossier
-                .fraisOuverture
-                .datePaiement ??
-              dossier
-                .fraisOuverture
-                .createdAt,
-
-            montant:
-              Number(
-                dossier
-                  .fraisOuverture
-                  .montant,
-              ),
-
-            moyenPaiement:
-              dossier
-                .fraisOuverture
-                .mouvementFinance
-                ?.moyenPaiement ??
-              null,
-
-            note:
-              dossier
-                .fraisOuverture
-                .mouvementFinance
-                ?.description ??
-              null,
-
-            facture:
-              null,
-
-            recu:
-              dossier
-                .fraisOuverture
-                .mouvementFinance
-                ?.recuEncaissement ??
-              null,
-
-            montantImpute:
-              undefined,
-
-            montantDisponible:
-              undefined,
-          },
-        ]
-        : []),
-    ].sort(
-      (
-        a,
-        b,
-      ) =>
-        new Date(
-          a.date,
-        ).getTime() -
-        new Date(
-          b.date,
-        ).getTime(),
-    );
-
-    // ============================================================
-    // RETOUR
-    // ============================================================
-
+      ...consolidation.factures.flatMap(facture => facture.paiements.map(payment => ({
+        ...payment, type: 'PAIEMENT' as const,
+      }))),
+      ...consolidation.provisions.map(provision => ({
+        ...provision, type: 'PROVISION' as const, montant: provision.montantInitial, facture: null,
+      })),
+      ...(dossier.fraisOuverture?.statut === 'PAYE' ? [{
+        id: dossier.fraisOuverture.id, type: 'FRAIS_OUVERTURE' as const,
+        date: dossier.fraisOuverture.datePaiement ?? dossier.fraisOuverture.createdAt,
+        montant: consolidation.fraisOuverture?.montant ?? null,
+        devise: consolidation.fraisOuverture?.devise ?? null,
+        moyenPaiement: dossier.fraisOuverture.mouvementFinance?.moyenPaiement ?? null,
+        note: dossier.fraisOuverture.mouvementFinance?.description ?? null,
+        facture: null, recu: consolidation.fraisOuverture?.recu ?? null,
+      }] : []),
+    ].sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+    // Keep the historical numeric envelope for existing consumers. The versioned
+    // consolidation contains exact decimals and is the source used by the dossier UI.
+    const legacyNumber = (amount: string | null) => amount === null ? null : Number(amount);
+    const legacyMontants = {
+      totalFacture: legacyNumber(consolidation.montants.totalFacture),
+      totalPaiements: legacyNumber(consolidation.montants.totalPaiements),
+      totalProvisions: legacyNumber(consolidation.montants.totalProvisions),
+      totalProvisionsEncaissees: legacyNumber(consolidation.montants.totalProvisionsEncaissees),
+      totalProvisionsImputees: legacyNumber(consolidation.montants.totalProvisionsImputees),
+      totalProvisionsLegacy: legacyNumber(consolidation.montants.totalProvisionsLegacy),
+      totalProvisionsDisponibles: legacyNumber(consolidation.montants.totalProvisionsDisponibles),
+      totalRegleFactures: legacyNumber(consolidation.montants.totalRegleFactures),
+      totalFraisOuvertureEncaisse: legacyNumber(consolidation.montants.totalFraisOuvertureEncaisse),
+      totalEncaisse: legacyNumber(consolidation.montants.totalEncaisse),
+      totalEncaisseGlobal: legacyNumber(consolidation.montants.totalEncaisseGlobal),
+      resteAPayer: legacyNumber(consolidation.montants.resteAPayer),
+      tropPercu: legacyNumber(consolidation.montants.tropPercu),
+    };
     return {
-      dossier: {
-        id:
-          dossier.id,
-
-        reference:
-          dossier.reference,
-
-        client:
-          dossier.client,
-      },
-
-      totalFacture,
-
-      totalPaiements,
-
-      /**
-       * Pour compatibilité frontend :
-       * totalProvisions représente maintenant
-       * ce qui est réellement imputé aux factures.
-       */
-      totalProvisions,
-
-      totalProvisionsEncaissees,
-
-      totalProvisionsImputees,
-
-      totalProvisionsLegacy,
-
-      totalProvisionsDisponibles,
-
-      totalFraisOuvertureEncaisse,
-
-      /**
-       * Paiements + toutes les provisions encaissées.
-       */
-      totalEncaisse,
-
-      /**
-       * Paiements + provisions encaissées
-       * + frais d'ouverture payés.
-       */
-      totalEncaisseGlobal,
-
-      /**
-       * Somme réellement affectée aux factures.
-       */
-      totalRegleFactures,
-
-      resteAPayer,
-
-      tropPercu,
-
-      operations,
+      dossier: { id: dossier.id, reference: dossier.reference, client: dossier.client },
+      ...legacyMontants, consolidation,
+      operations: operations.map(operation => ({ ...operation, montant: legacyNumber(operation.montant) })),
     };
   }
 
@@ -850,13 +414,23 @@ export class DossiersService {
         },
 
         include: {
-          client: true,
+          client: {
+            select: {
+              id: true,
+              nom: true,
+              type: true,
+              email: true,
+              telephone: true,
+              adresse: true,
+              numeroContribuable: true,
+            },
+          },
 
-          avocatResponsable: true,
+          avocatResponsable: { select: { id: true, name: true } },
 
           collaborateurs: {
             include: {
-              user: true,
+              user: { select: { id: true, name: true } },
             },
           },
 
@@ -1389,12 +963,11 @@ export class DossiersService {
                 include: {
                   client: true,
 
-                  avocatResponsable:
-                    true,
+                  avocatResponsable: { select: { id: true, name: true } },
 
                   collaborateurs: {
                     include: {
-                      user: true,
+                      user: { select: { id: true, name: true } },
                     },
                   },
 
@@ -1612,13 +1185,11 @@ export class DossiersService {
                 client:
                   true,
 
-                avocatResponsable:
-                  true,
+                avocatResponsable: { select: { id: true, name: true } },
 
                 collaborateurs: {
                   include: {
-                    user:
-                      true,
+                    user: { select: { id: true, name: true } },
                   },
                 },
 

@@ -146,7 +146,7 @@ describe('DossiersService mandatory opening payment', () => {
   it('keeps historical unpaid dossiers readable and excludes unpaid fees from receipts', async () => {
     const dossiers = await service.findAll();
     expect(dossiers[0].fraisOuverture).toMatchObject({ statut: 'A_PAYER', statutAffichage: 'IMPAYE' });
-    const book = await service.getLivrePaiements('legacy');
+    const book = await service.getLivrePaiements('legacy', Role.AVOCAT);
     expect(book.totalFraisOuvertureEncaisse).toBe(0);
     expect(book.operations).toEqual([]);
     expect(prisma.$transaction).not.toHaveBeenCalled();
