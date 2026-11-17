@@ -1,7 +1,10 @@
 import {
     BadRequestException,
+    ConflictException,
     Injectable,
     NotFoundException,
+    ServiceUnavailableException,
+    UnauthorizedException,
 } from '@nestjs/common';
 
 import {
@@ -35,6 +38,7 @@ import {
 import {
     CreateFinanceAttachmentDto,
 } from './dto/create-finance-attachment.dto';
+import { signFinanceUpload, verifyFinanceUpload, validateFinanceStorageKey } from './finance-upload';
 
 @Injectable()
 export class FinanceAttachmentsService {
@@ -136,11 +140,29 @@ export class FinanceAttachmentsService {
 
         if (
             taille !== undefined &&
-            taille > this.maxFileSize
+            (!Number.isSafeInteger(taille) || taille <= 0 || taille > this.maxFileSize)
         ) {
             throw new BadRequestException(
                 'Le fichier ne peut pas dépasser 10 Mo.',
             );
+        }
+    }
+
+    private async uploadActor(userId?: string) {
+        if (!userId) throw new UnauthorizedException('Authentification requise.');
+        const actor = await this.prisma.user.findUnique({ where: { id: userId }, select: { active: true, role: true } });
+        if (!actor?.active) throw new UnauthorizedException('Compte absent ou inactif.');
+        this.permissions.require(this.permissions.canManagePieceJointes(actor.role), 'Ajout de justificatifs non autorisé.');
+        return userId;
+    }
+
+    private async objectInfo(key: string) {
+        try { return await this.s3.getDocumentObjectInfo(key); }
+        catch (error) {
+            const status = error && typeof error === 'object' && '$metadata' in error
+                ? (error.$metadata as { httpStatusCode?: number }).httpStatusCode : undefined;
+            if (status === 404) throw new NotFoundException('Fichier absent du stockage privé.');
+            throw new ServiceUnavailableException('Stockage financier momentanément indisponible.');
         }
     }
 
@@ -154,6 +176,7 @@ export class FinanceAttachmentsService {
             PresignFinanceAttachmentDto,
         role:
             Role,
+        userId?: string,
     ) {
         this.permissions.require(
             this.permissions.canManagePieceJointes(
@@ -162,6 +185,7 @@ export class FinanceAttachmentsService {
             'Seul le comptable peut ajouter des justificatifs financiers.',
         );
 
+        const actorId = await this.uploadActor(userId);
         await this.requireMouvement(
             mouvementId,
         );
@@ -170,6 +194,7 @@ export class FinanceAttachmentsService {
             dto.contentType,
             dto.taille,
         );
+        if (!dto.taille) throw new BadRequestException('Taille du justificatif requise.');
 
         const filename =
             this.sanitizeFilename(
@@ -178,16 +203,22 @@ export class FinanceAttachmentsService {
 
         const storageKey =
             `finance/mouvements/${mouvementId}/${randomUUID()}-${filename}`;
+        validateFinanceStorageKey(storageKey, mouvementId);
+        const uploadToken = signFinanceUpload({ userId: actorId, mouvementId, storageKey, nom: dto.filename.trim(),
+            type: dto.contentType, taille: dto.taille, expires: Date.now() + 300_000 });
 
         const uploadUrl =
-            await this.s3.getUploadUrl(
+            await this.s3.getDocumentUploadUrl(
                 storageKey,
                 dto.contentType,
+                dto.taille,
             );
 
         return {
             uploadUrl,
             storageKey,
+            uploadToken,
+            headers: { 'Content-Type': dto.contentType, 'If-None-Match': '*' },
         };
     }
 
@@ -262,6 +293,15 @@ export class FinanceAttachmentsService {
             await this.requireMouvement(
                 mouvementId,
             );
+        await this.uploadActor(uploadedById);
+        validateFinanceStorageKey(dto.storageKey, mouvementId);
+        verifyFinanceUpload(dto.uploadToken, { userId: uploadedById, mouvementId, storageKey: dto.storageKey,
+            nom: dto.nom.trim(), type: dto.type ?? '', taille: dto.taille ?? 0 });
+        const object = await this.objectInfo(dto.storageKey);
+        this.validateFile(object.type ?? '', object.taille);
+        if (object.taille !== dto.taille || object.type !== dto.type) {
+            throw new BadRequestException('Les métadonnées ne correspondent pas au fichier réellement stocké.');
+        }
 
         if (
             dto.type
@@ -306,13 +346,14 @@ export class FinanceAttachmentsService {
         if (
             existing
         ) {
-            throw new BadRequestException(
+            throw new ConflictException(
                 'Ce justificatif a déjà été enregistré.',
             );
         }
 
+        return this.prisma.$transaction(async tx => {
         const piece =
-            await this.prisma.pieceJointeFinance.create({
+            await tx.pieceJointeFinance.create({
                 data: {
                     nom:
                         dto.nom.trim(),
@@ -381,9 +422,15 @@ export class FinanceAttachmentsService {
                 taille:
                     piece.taille,
             },
-        });
+        }, tx);
 
         return piece;
+        }).catch(error => {
+            if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+                throw new ConflictException('Ce justificatif a déjà été enregistré par une autre demande.');
+            }
+            throw error;
+        });
     }
 
     // ============================================================
@@ -462,10 +509,10 @@ export class FinanceAttachmentsService {
                 role,
             );
 
-        const url =
-            await this.s3.getViewUrl(
-                piece.storageKey,
-            );
+        validateFinanceStorageKey(piece.storageKey, piece.mouvement.id);
+        const object = await this.objectInfo(piece.storageKey);
+        this.validateFile(object.type ?? '', object.taille);
+        const url = await this.s3.getDocumentReadUrl(piece.storageKey, object.type!, piece.nom, true);
 
         await this.activityLog.log({
             userId,
@@ -514,10 +561,9 @@ export class FinanceAttachmentsService {
                 role,
             );
 
-        const url =
-            await this.s3.getDownloadUrl(
-                piece.storageKey,
-            );
+        validateFinanceStorageKey(piece.storageKey, piece.mouvement.id);
+        const object = await this.objectInfo(piece.storageKey);
+        const url = await this.s3.getDocumentReadUrl(piece.storageKey, object.type || 'application/octet-stream', piece.nom, false);
 
         await this.activityLog.log({
             userId,
@@ -594,7 +640,15 @@ export class FinanceAttachmentsService {
             );
         }
 
-        await this.s3.deleteObject(
+        validateFinanceStorageKey(piece.storageKey, piece.mouvement.id);
+        // R2 and PostgreSQL cannot commit atomically. Persist the intent first so
+        // a crash or storage failure never erases all evidence of the attempt.
+        await this.activityLog.log({ userId, action: 'PIECE_JOINTE_FINANCE_SUPPRESSION_DEMANDEE',
+            entityType: 'PieceJointeFinance', entityId: piece.id, dossierId: piece.mouvement.dossierId ?? undefined,
+            metadata: { mouvementId: piece.mouvement.id, storageKey: piece.storageKey, nom: piece.nom,
+                uploadedById: piece.uploadedById, type: piece.type, taille: piece.taille },
+        });
+        await this.s3.deleteFinanceObject(
             piece.storageKey,
         );
 

@@ -1,3 +1,5 @@
+import { FinancePermissionService } from '../finance/finance-permission.service';
+import { FinancialDataGuard } from '../../common/guards/financial-data.guard';
 // import { Module } from '@nestjs/common';
 
 // import { PrismaModule } from '../../prisma/prisma.module';
@@ -32,7 +34,7 @@ import { FinanceModule } from '../finance/finance.module';
     FacturesController,
   ],
 
-  providers: [
+  providers: [FinancialDataGuard, FinancePermissionService,
     FacturesService,
   ],
 

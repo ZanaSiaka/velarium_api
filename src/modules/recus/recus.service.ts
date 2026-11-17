@@ -1,3 +1,5 @@
+import { DOSSIER_REFERENCE_SELECT } from '../../common/dossier-projections';
+import { exactMoney } from '../../common/finance/financial-read';
 import {
     Injectable,
     NotFoundException,
@@ -90,7 +92,7 @@ export class RecusService {
 
     private readonly include = {
         dossier: {
-            include: {
+            select: { ...DOSSIER_REFERENCE_SELECT,
                 client: {
                     select: {
                         id: true,
@@ -138,6 +140,7 @@ export class RecusService {
     ) {
         return {
             ...recu,
+            montantExact: exactMoney(recu.montant),
 
             montant:
                 num(

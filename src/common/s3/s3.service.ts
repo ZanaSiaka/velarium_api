@@ -3,6 +3,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -14,6 +15,10 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 export class S3Service {
   private assertGenericKey(key: string) {
     if (key.startsWith('sanctions-private/')) throw new ForbiddenException('Pièce accessible uniquement par son module dédié.');
+  }
+  private assertLegacyKey(key: string) {
+    this.assertGenericKey(key);
+    if (key.startsWith('finance/')) throw new ForbiddenException('Justificatif accessible uniquement par le module Finance.');
   }
   private readonly client: S3Client;
   private readonly bucket: string;
@@ -41,7 +46,7 @@ export class S3Service {
   }
 
   getUploadUrl(key: string, contentType: string) {
-    this.assertGenericKey(key);
+    this.assertLegacyKey(key);
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -51,7 +56,7 @@ export class S3Service {
   }
 
   getDownloadUrl(key: string) {
-    this.assertGenericKey(key);
+    this.assertLegacyKey(key);
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -60,7 +65,7 @@ export class S3Service {
   }
 
   getViewUrl(key: string) {
-    this.assertGenericKey(key);
+    this.assertLegacyKey(key);
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -72,8 +77,43 @@ export class S3Service {
     });
   }
 
-  async deleteObject(key: string) {
+  getDocumentUploadUrl(key: string, contentType: string, size: number) {
     this.assertGenericKey(key);
+    return getSignedUrl(this.client, new PutObjectCommand({
+      Bucket: this.bucket, Key: key, ContentType: contentType, ContentLength: size, IfNoneMatch: '*',
+    }), { expiresIn: 300, signableHeaders: new Set(['content-type', 'content-length', 'if-none-match']) });
+  }
+
+  async getDocumentObjectInfo(key: string) {
+    this.assertGenericKey(key);
+    const object = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+    return { taille: object.ContentLength, type: object.ContentType?.split(';')[0].trim().toLowerCase() };
+  }
+
+  getDocumentReadUrl(key: string, mime: string, filename: string, preview: boolean) {
+    this.assertGenericKey(key);
+    // Active content (HTML/SVG/etc.) is downloaded, never rendered inline.
+    const inline = preview && ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mime);
+    const disposition = (inline ? 'inline' : 'attachment') + "; filename*=UTF-8''" + encodeURIComponent(filename).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16));
+    return getSignedUrl(this.client, new GetObjectCommand({
+      Bucket: this.bucket, Key: key,
+      ResponseContentType: inline ? mime : 'application/octet-stream',
+      ResponseContentDisposition: disposition,
+      ResponseCacheControl: 'private, no-store',
+    }), { expiresIn: 300 });
+  }
+
+  async deleteObject(key: string) {
+    this.assertLegacyKey(key);
+    await this.deleteStoredObject(key);
+  }
+
+  async deleteFinanceObject(key: string) {
+    if (!key.startsWith('finance/mouvements/')) throw new ForbiddenException('Clé financière invalide.');
+    await this.deleteStoredObject(key);
+  }
+
+  private async deleteStoredObject(key: string) {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );

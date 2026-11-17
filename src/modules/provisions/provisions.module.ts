@@ -1,3 +1,5 @@
+import { FinancePermissionService } from '../finance/finance-permission.service';
+import { FinancialDataGuard } from '../../common/guards/financial-data.guard';
 import { Module } from '@nestjs/common';
 
 import { PrismaModule } from '../../prisma/prisma.module';
@@ -7,6 +9,6 @@ import { ProvisionsController } from './provisions.controller';
 @Module({
   imports: [PrismaModule],
   controllers: [ProvisionsController],
-  providers: [ProvisionsService],
+  providers: [FinancialDataGuard, FinancePermissionService,ProvisionsService],
 })
 export class ProvisionsModule {}

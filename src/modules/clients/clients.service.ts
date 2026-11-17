@@ -1,3 +1,7 @@
+import { BILLING_CASH_INCLUDE, BILLING_INVOICE_INCLUDE, BILLING_PROVISION_INCLUDE } from '../../common/finance/billing';
+import { sumMoney } from '../../common/finance/financial-read';
+import { readDossierFinance } from '../dossiers/dossier-finance-read';
+import { DOSSIER_PUBLIC_SELECT } from '../../common/dossier-projections';
 import { ClientType } from '../../../generated/prisma/client';
 import { validateSync } from 'class-validator';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
@@ -27,7 +31,7 @@ export class ClientsService {
       include: {
         dossiers: {
           orderBy: { createdAt: 'desc' },
-          include: { avocatResponsable: true },
+          select: { ...DOSSIER_PUBLIC_SELECT, avocatResponsable: { select: { id: true, name: true } } },
         },
       },
     });
@@ -40,138 +44,38 @@ export class ClientsService {
   }
 
   async getLivrePaiements(id: string) {
-    const client = await this.prisma.client.findUnique({
-      where: { id },
-      include: {
-        dossiers: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            factures: {
-              orderBy: { dateEmission: 'asc' },
-              include: {
-                paiements: {
-                  orderBy: { datePaiement: 'asc' },
-                },
-              },
-            },
-            provisions: {
-              orderBy: { datePaiement: 'asc' },
-            },
-          },
-        },
+    const client = await this.prisma.client.findUnique({ where: { id }, include: { dossiers: {
+      orderBy: { createdAt: 'asc' }, include: {
+        factures: { include: BILLING_INVOICE_INCLUDE },
+        provisions: { include: BILLING_PROVISION_INCLUDE },
+        fraisOuverture: { include: { mouvementFinance: { include: BILLING_CASH_INCLUDE } } },
       },
-    });
-
-    if (!client) {
-      throw new NotFoundException('Client introuvable.');
-    }
-
-    const totalFacture = client.dossiers.reduce(
-      (sum, dossier) =>
-        sum +
-        dossier.factures.reduce(
-          (factureSum, facture) =>
-            factureSum + Number(facture.montantTTC),
-          0,
-        ),
-      0,
-    );
-
-    const totalPaiements = client.dossiers.reduce(
-      (sum, dossier) =>
-        sum +
-        dossier.factures.reduce(
-          (factureSum, facture) =>
-            factureSum +
-            facture.paiements.reduce(
-              (paiementSum, paiement) =>
-                paiementSum + Number(paiement.montant),
-              0,
-            ),
-          0,
-        ),
-      0,
-    );
-
-    const totalProvisions = client.dossiers.reduce(
-      (sum, dossier) =>
-        sum +
-        dossier.provisions.reduce(
-          (provisionSum, provision) =>
-            provisionSum + Number(provision.montant),
-          0,
-        ),
-      0,
-    );
-
-    const totalEncaisse = totalPaiements + totalProvisions;
-
-    const solde = totalFacture - totalEncaisse;
-
-    const operations = [
-      ...client.dossiers.flatMap((dossier) =>
-        dossier.factures.flatMap((facture) =>
-          facture.paiements.map((paiement) => ({
-            id: paiement.id,
-            type: 'PAIEMENT',
-            date: paiement.datePaiement,
-            montant: Number(paiement.montant),
-            moyenPaiement: paiement.moyenPaiement,
-            note: paiement.note,
-
-            dossier: {
-              id: dossier.id,
-              reference: dossier.reference,
-            },
-
-            facture: {
-              id: facture.id,
-              numero: facture.numero,
-              montantTTC: Number(facture.montantTTC),
-            },
-          })),
-        ),
-      ),
-
-      ...client.dossiers.flatMap((dossier) =>
-        dossier.provisions.map((provision) => ({
-          id: provision.id,
-          type: 'PROVISION',
-          date: provision.datePaiement,
-          montant: Number(provision.montant),
-          moyenPaiement: provision.moyenPaiement,
-          note: provision.note,
-
-          dossier: {
-            id: dossier.id,
-            reference: dossier.reference,
-          },
-
-          facture: null,
-        })),
-      ),
-    ].sort(
-      (a, b) =>
-        new Date(a.date).getTime() -
-        new Date(b.date).getTime(),
-    );
-
-    return {
-      client: {
-        id: client.id,
-        nom: client.nom,
-        email: client.email,
-        telephone: client.telephone,
-      },
-
-      totalFacture,
-      totalPaiements,
-      totalProvisions,
-      totalEncaisse,
-      solde,
-
-      operations,
-    };
+    } } });
+    if (!client) throw new NotFoundException('Client introuvable.');
+    const ledgers = client.dossiers.map(dossier => readDossierFinance({ ...dossier, client: { id: client.id, nom: client.nom } }));
+    const total = (key: keyof (typeof ledgers)[number]['montants']) => sumMoney(ledgers.map(row => row.montants[key]));
+    const montants = { totalFacture: total('totalFacture'), totalPaiements: total('totalPaiements'),
+      totalProvisions: total('totalProvisionsEncaissees'), totalProvisionsDisponibles: total('totalProvisionsDisponibles'),
+      totalProvisionsImputees: total('totalProvisions'),
+      totalEncaisse: total('totalEncaisse'), totalEncaisseGlobal: total('totalEncaisseGlobal'),
+      solde: total('resteAPayer'), tropPercu: total('tropPercu'), totalBrouillons: total('totalBrouillons') };
+    const numeric = (value: string | null) => value === null ? null : Number(value);
+    const operations = client.dossiers.flatMap(dossier => [
+      ...dossier.factures.flatMap(facture => facture.paiements.map(payment => ({
+        id: payment.id, type: 'PAIEMENT', date: payment.datePaiement, montant: payment.montant.toNumber(), montantExact: payment.montant.toFixed(2),
+        moyenPaiement: payment.moyenPaiement, note: payment.note, dossier: { id: dossier.id, reference: dossier.reference },
+        facture: { id: facture.id, numero: facture.numero, montantTTC: facture.montantTTC.toNumber() },
+      }))),
+      ...dossier.provisions.map(provision => ({
+        id: provision.id, type: 'PROVISION', date: provision.datePaiement, montant: provision.montant.toNumber(), montantExact: provision.montant.toFixed(2),
+        moyenPaiement: provision.moyenPaiement, note: provision.note, dossier: { id: dossier.id, reference: dossier.reference }, facture: null,
+      })),
+    ]).sort((a, b) => a.date.getTime() - b.date.getTime());
+    return { client: { id: client.id, nom: client.nom, email: client.email, telephone: client.telephone },
+      totalFacture: numeric(montants.totalFacture), totalPaiements: numeric(montants.totalPaiements),
+      totalProvisions: numeric(montants.totalProvisions), totalEncaisse: numeric(montants.totalEncaisse), solde: numeric(montants.solde),
+      tropPercu: numeric(montants.tropPercu), montants, operations,
+      avertissements: [...new Set(ledgers.flatMap(row => row.avertissements))], perimetreFactures: 'HORS_BROUILLONS' };
   }
 
   async create(dto: CreateClientDto, userId: string) {

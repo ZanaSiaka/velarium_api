@@ -1,3 +1,5 @@
+import { FinancePermissionService } from '../finance/finance-permission.service';
+import { FinancialDataGuard } from '../../common/guards/financial-data.guard';
 import {
     Module,
 } from '@nestjs/common';
@@ -23,7 +25,7 @@ import {
         RecusController,
     ],
 
-    providers: [
+    providers: [FinancialDataGuard, FinancePermissionService,
         RecusService,
     ],
 

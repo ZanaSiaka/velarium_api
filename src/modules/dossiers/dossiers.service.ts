@@ -1,8 +1,13 @@
+import { isTreasuryConflict, lockTreasuryAccounts } from '../../common/finance/treasury';
+import { allocateBillingNumber, BILLING_CASH_INCLUDE } from '../../common/finance/billing';
+import { DOSSIER_PUBLIC_SELECT, DOSSIER_REFERENCE_SELECT } from '../../common/dossier-projections';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 
 import {
@@ -28,6 +33,7 @@ import {
 } from './dto/update-dossier.dto';
 
 import { validateSync } from 'class-validator';
+import { hasKycDeclaration } from './dto/kyc-declaration.validator';
 
 import { FinancePermissionService } from '../finance/finance-permission.service';
 
@@ -45,175 +51,33 @@ export class DossiersService {
   // LISTE DES DOSSIERS
   // ============================================================
 
-  async findAll() {
-    const dossiers =
-      await this.prisma.dossier.findMany({
-        where: {
-          archive: false,
-        },
-
-        orderBy: {
-          createdAt: 'desc',
-        },
-
-        include: {
-          client: true,
-
-          avocatResponsable: { select: { id: true, name: true } },
-
-          fraisOuverture: {
-            select: {
-              id: true,
-              montant: true,
-              statut: true,
-              datePaiement: true,
-
-              // Legacy
-              factureId: true,
-
-              mouvementFinanceId: true,
-
-              mouvementFinance: {
-                select: {
-                  id: true,
-                  moyenPaiement: true,
-                  reference: true,
-
-                  caisse: {
-                    select: {
-                      id: true,
-                      nom: true,
-                      type: true,
-                    },
-                  },
-
-                  recuEncaissement: {
-                    select: {
-                      id: true,
-                      numero: true,
-                      dateEmission: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-
-    return dossiers.map((dossier) => ({
-      ...dossier,
-
-      fraisOuverture:
-        dossier.fraisOuverture
-          ? {
-            ...dossier.fraisOuverture,
-
-            montant:
-              Number(
-                dossier
-                  .fraisOuverture
-                  .montant,
-              ),
-
-            statutAffichage:
-              dossier
-                .fraisOuverture
-                .statut === 'PAYE'
-                ? 'PAYE'
-                : 'IMPAYE',
-          }
-          : null,
-    }));
+  private async viewer(userId?: string) {
+    if (!userId) throw new UnauthorizedException('Authentification requise.');
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, active: true } });
+    if (!user?.active) throw new UnauthorizedException('Compte absent ou inactif.');
+    return user;
   }
 
-  // ============================================================
-  // LISTE DES DOSSIERS ARCHIVES
-  // ============================================================
-
-  async findArchived() {
-    const dossiers =
-      await this.prisma.dossier.findMany({
-        where: {
-          archive: true,
-        },
-
-        orderBy: {
-          archivedAt: 'desc',
-        },
-
-        include: {
-          client: true,
-
-          avocatResponsable: { select: { id: true, name: true } },
-
-          fraisOuverture: {
-            select: {
-              id: true,
-              montant: true,
-              statut: true,
-              datePaiement: true,
-
-              // Legacy
-              factureId: true,
-
-              mouvementFinanceId: true,
-
-              mouvementFinance: {
-                select: {
-                  id: true,
-
-                  moyenPaiement: true,
-
-                  reference: true,
-
-                  caisse: {
-                    select: {
-                      id: true,
-                      nom: true,
-                      type: true,
-                    },
-                  },
-
-                  recuEncaissement: {
-                    select: {
-                      id: true,
-                      numero: true,
-                      dateEmission: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-
-    return dossiers.map((dossier) => ({
-      ...dossier,
-
-      fraisOuverture:
-        dossier.fraisOuverture
-          ? {
-            ...dossier.fraisOuverture,
-
-            montant:
-              Number(
-                dossier
-                  .fraisOuverture
-                  .montant,
-              ),
-
-            statutAffichage:
-              dossier
-                .fraisOuverture
-                .statut === 'PAYE'
-                ? 'PAYE'
-                : 'IMPAYE',
-          }
-          : null,
-    }));
+  private async listDossiers(archive: boolean, userId?: string) {
+    const user = await this.viewer(userId);
+    const canFinance = this.financePermissions.canViewFinance(user.role);
+    const rows = await this.prisma.dossier.findMany({
+      where: { archive }, orderBy: archive ? { archivedAt: 'desc' } : { createdAt: 'desc' },
+      select: {
+        ...DOSSIER_PUBLIC_SELECT,
+        client: { select: { id: true, nom: true, type: true } },
+        avocatResponsable: { select: { id: true, name: true } },
+        ...(canFinance ? { fraisOuverture: { select: { id: true, montant: true, statut: true, datePaiement: true, factureId: true } } } : {}),
+      },
+    });
+    // No KYC in list responses, including for lawyers.
+    return rows.map(row => ({ ...row, ...(canFinance ? { fraisOuverture: row.fraisOuverture ? {
+      ...row.fraisOuverture, montant: Number(row.fraisOuverture.montant), statutAffichage: row.fraisOuverture.statut === 'PAYE' ? 'PAYE' : 'IMPAYE',
+    } : null } : {}) }));
   }
+
+  findAll(userId?: string) { return this.listDossiers(false, userId); }
+  findArchived(userId?: string) { return this.listDossiers(true, userId); }
 
   // ============================================================
   // LIVRE DES PAIEMENTS
@@ -240,12 +104,7 @@ export class DossiersService {
           fraisOuverture: {
             include: {
               mouvementFinance: {
-                include: {
-                  caisse: true,
-
-                  recuEncaissement:
-                    true,
-                },
+                include: BILLING_CASH_INCLUDE,
               },
             },
           },
@@ -261,8 +120,9 @@ export class DossiersService {
             },
 
             include: {
+              lignes: true,
               paiements: {
-                include: { mouvementFinance: { include: { caisse: true, recuEncaissement: true } } },
+                include: { mouvementFinance: { include: BILLING_CASH_INCLUDE } },
                 orderBy: {
                   datePaiement:
                     'asc',
@@ -338,13 +198,7 @@ export class DossiersService {
               },
 
               mouvementFinance: {
-                include: {
-                  caisse:
-                    true,
-
-                  recuEncaissement:
-                    true,
-                },
+                include: BILLING_CASH_INCLUDE,
               },
             },
           },
@@ -404,94 +258,20 @@ export class DossiersService {
   // DETAIL D'UN DOSSIER
   // ============================================================
 
-  async findOne(
-    id: string,
-  ) {
-    const dossier =
-      await this.prisma.dossier.findUnique({
-        where: {
-          id,
-        },
-
-        include: {
-          client: {
-            select: {
-              id: true,
-              nom: true,
-              type: true,
-              email: true,
-              telephone: true,
-              adresse: true,
-              numeroContribuable: true,
-            },
-          },
-
-          avocatResponsable: { select: { id: true, name: true } },
-
-          collaborateurs: {
-            include: {
-              user: { select: { id: true, name: true } },
-            },
-          },
-
-          evenements: {
-            orderBy: {
-              start: 'asc',
-            },
-          },
-
-          fraisOuverture: {
-            include: {
-              // Relation conservée uniquement pour
-              // les anciennes données.
-              facture: true,
-
-              mouvementFinance: {
-                include: {
-                  caisse: true,
-
-                  recuEncaissement: true,
-                },
-              },
-            },
-          },
-
-          recusEncaissement: {
-            orderBy: {
-              dateEmission: 'desc',
-            },
-          },
-
-          factures: {
-            orderBy: {
-              dateEmission: 'asc',
-            },
-
-            include: {
-              lignes: true,
-
-              paiements: {
-                orderBy: {
-                  datePaiement: 'asc',
-                },
-              },
-            },
-          },
-
-          provisions: {
-            orderBy: {
-              datePaiement: 'asc',
-            },
-          },
-        },
-      });
-
-    if (!dossier) {
-      throw new NotFoundException(
-        'Dossier introuvable.',
-      );
-    }
-
+  async findOne(id: string, userId?: string) {
+    // Internal D1 existence checks receive a safe projection, never privileged KYC.
+    const canKyc = userId ? (await this.viewer(userId)).role === Role.AVOCAT : false;
+    const dossier = await this.prisma.dossier.findUnique({
+      where: { id },
+      select: {
+        ...DOSSIER_PUBLIC_SELECT,
+        ...(canKyc ? { kycSoupcon: true, declarationSoupcon: true } : {}),
+        client: { select: { id: true, nom: true, type: true, email: true, telephone: true, adresse: true, numeroContribuable: true } },
+        avocatResponsable: { select: { id: true, name: true } },
+        collaborateurs: { select: { id: true, userId: true, user: { select: { id: true, name: true } } } },
+      },
+    });
+    if (!dossier) throw new NotFoundException('Dossier introuvable.');
     return dossier;
   }
 
@@ -499,26 +279,42 @@ export class DossiersService {
   // GENERATION REFERENCE DOSSIER
   // ============================================================
 
-  private async generateReference() {
-    const year =
-      new Date().getFullYear();
+  private async generateReference(tx: Prisma.TransactionClient) {
+    const prefix = `${new Date().getFullYear()}-`;
+    let sequence = await tx.dossier.count({ where: { reference: { startsWith: prefix } } }) + 1;
+    // Keep count-based numbering; skip an occupied historical candidate after gaps.
+    while (true) {
+      const reference = prefix + String(sequence).padStart(3, '0');
+      if (!await tx.dossier.findUnique({ where: { reference }, select: { id: true } })) return reference;
+      sequence++;
+    }
+  }
 
-    const count =
-      await this.prisma.dossier.count({
-        where: {
-          reference: {
-            startsWith:
-              `${year}-`,
-          },
-        },
-      });
+  private async generateReceiptNumber(tx: Prisma.TransactionClient, year: number) {
+    return allocateBillingNumber(tx, 'REC', year);
+  }
 
-    return `${year}-${String(
-      count + 1,
-    ).padStart(
-      3,
-      '0',
-    )}`;
+  private isNumberingConflict(error: unknown): boolean {
+    if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'P2002') return false;
+    const meta = 'meta' in error && error.meta && typeof error.meta === 'object'
+      ? error.meta as { modelName?: unknown; target?: unknown } : {};
+    if (typeof meta.modelName === 'string' && !['Dossier', 'RecuEncaissement'].includes(meta.modelName)) return false;
+    const targets = Array.isArray(meta.target) ? meta.target : typeof meta.target === 'string' ? [meta.target] : [];
+    return targets.some(target => typeof target === 'string' && /(^reference$|^numero$|Dossier_reference_key|RecuEncaissement_numero_key)/.test(target))
+      || (targets.length === 0 && ['Dossier', 'RecuEncaissement'].includes(String(meta.modelName)));
+  }
+
+  private async dossierTransaction<T>(work: (tx: Prisma.TransactionClient) => Promise<T>, retryNumbering = false): Promise<T> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await this.prisma.$transaction(work, { isolationLevel: 'Serializable', maxWait: 10_000, timeout: 20_000 });
+      } catch (error) {
+        const serializationConflict = isTreasuryConflict(error);
+        if (!serializationConflict && !(retryNumbering && this.isNumberingConflict(error))) throw error;
+        if (attempt === 2) throw new ConflictException('Le dossier a été modifié ou créé simultanément. Veuillez réessayer.');
+      }
+    }
+    throw new ConflictException('Veuillez réessayer cette opération.');
   }
 
   // ============================================================
@@ -534,6 +330,10 @@ export class DossiersService {
       throw new BadRequestException(
         'Les frais d’ouverture doivent être réglés et encaissés lors de la création du dossier.',
       );
+    }
+
+    if (dto.kycSoupcon === true && !hasKycDeclaration(dto.declarationSoupcon)) {
+      throw new BadRequestException('La déclaration du soupçon est obligatoire lorsque le soupçon est actif.');
     }
 
     // ============================================================
@@ -583,18 +383,11 @@ export class DossiersService {
     }
 
     // ============================================================
-    // REFERENCE DOSSIER
-    // ============================================================
-
-    const reference =
-      await this.generateReference();
-
-    // ============================================================
     // TRANSACTION
     // ============================================================
 
     const dossier =
-      await this.prisma.$transaction(
+      await this.dossierTransaction(
         async (tx) => {
           // Apply the same account and movement permissions as the Finance module.
           const encaisseur = await tx.user.findUnique({ where: { id: userId } });
@@ -606,6 +399,10 @@ export class DossiersService {
             this.financePermissions.canCreateMouvement(encaisseur.role),
             'Vous n’avez pas les permissions nécessaires pour encaisser les frais d’ouverture.',
           );
+
+          if (encaisseur.role !== Role.AVOCAT && (dto.kycSoupcon === true || dto.declarationSoupcon !== undefined)) {
+            throw new ForbiddenException('Informations KYC réservées aux avocats actifs.');
+          }
 
           // ======================================================
           // CLIENT
@@ -713,6 +510,7 @@ export class DossiersService {
               );
             }
 
+            await lockTreasuryAccounts(tx, [dto.caisseIdFraisOuverture]);
             caisse =
               await tx.caisse.findUnique({
                 where: {
@@ -848,6 +646,8 @@ export class DossiersService {
             tx, dto.collaborateurIds === undefined ? [] : dto.collaborateurIds,
           );
 
+          const reference = await this.generateReference(tx);
+
           const createdDossier =
             await tx.dossier.create({
               data: {
@@ -861,6 +661,8 @@ export class DossiersService {
 
                 statut:
                   dto.statut,
+
+                dateCloture: dto.statut === 'CLOTURE' ? new Date() : null,
 
                 clientId:
                   dto.clientId,
@@ -895,7 +697,7 @@ export class DossiersService {
                   null,
 
                 kycSoupcon:
-                  dto.kycSoupcon,
+                  dto.kycSoupcon ?? false,
 
                 declarationSoupcon:
                   dto.kycSoupcon
@@ -1006,25 +808,7 @@ export class DossiersService {
           const receiptYear =
             datePaiement!.getFullYear();
 
-          const receiptCount =
-            await tx
-              .recuEncaissement
-              .count({
-                where: {
-                  numero: {
-                    startsWith:
-                      `REC-${receiptYear}-`,
-                  },
-                },
-              });
-
-          const numeroRecu =
-            `REC-${receiptYear}-${String(
-              receiptCount + 1,
-            ).padStart(
-              4,
-              '0',
-            )}`;
+          const numeroRecu = await this.generateReceiptNumber(tx, receiptYear);
 
           // ======================================================
           // MOUVEMENT FINANCE
@@ -1174,6 +958,11 @@ export class DossiersService {
           // RETOUR
           // ======================================================
 
+          await this.activityLog.log({ userId, action: 'FRAIS_OUVERTURE_ENCAISSES', entityType: 'MouvementFinance',
+            entityId: mouvement.id, dossierId: createdDossier.id,
+            metadata: { montantExact: montant.toFixed(2), devise: caisse!.devise, caisseId: caisse!.id,
+              dateMetier: datePaiement!.toISOString(), moyenPaiement: moyenPaiement!, numeroRecu },
+          }, tx);
           return tx.dossier
             .findUniqueOrThrow({
               where: {
@@ -1217,13 +1006,7 @@ export class DossiersService {
             });
         },
 
-        {
-          maxWait:
-            10_000,
-
-          timeout:
-            20_000,
-        },
+        true,
       );
 
     // ============================================================
@@ -1271,7 +1054,7 @@ export class DossiersService {
       },
     });
 
-    return dossier;
+    return this.findOne(dossier.id, userId);
   }
 
   // ============================================================
@@ -1303,13 +1086,40 @@ export class DossiersService {
     dto: UpdateDossierDto,
     userId: string,
   ) {
-    await this.findOne(
-      id,
-    );
+    if (!dto || typeof dto !== 'object' || Array.isArray(dto) ||
+        validateSync(Object.assign(new UpdateDossierDto(), dto), { whitelist: true, forbidNonWhitelisted: true }).length) {
+      throw new BadRequestException('Données de modification du dossier invalides.');
+    }
+    for (const field of ['natureAffaire', 'typeDossier', 'clientId', 'avocatResponsableId'] as const) {
+      if (dto[field] !== undefined && !dto[field]?.trim()) throw new BadRequestException('Un champ obligatoire ne peut pas être effacé.');
+    }
+    await this.findOne(id);
 
     const dossier =
-      await this.prisma.$transaction(
+      await this.dossierTransaction(
         async (tx) => {
+          if (dto.kycSoupcon !== undefined || dto.declarationSoupcon !== undefined) {
+            const actor = await tx.user.findUnique({ where: { id: userId }, select: { active: true, role: true } });
+            if (!actor?.active || actor.role !== Role.AVOCAT) throw new ForbiddenException('Informations KYC réservées aux avocats actifs.');
+          }
+          const current = await tx.dossier.findUniqueOrThrow({
+            where: { id },
+            select: { statut: true, dateCloture: true, archive: true, kycSoupcon: true, declarationSoupcon: true },
+          });
+          if (current.archive && dto.statut !== undefined && dto.statut !== 'CLOTURE') {
+            throw new BadRequestException('Désarchivez le dossier avant de changer son statut.');
+          }
+          if (dto.kycSoupcon !== undefined || dto.declarationSoupcon !== undefined) {
+            const finalSuspicion = dto.kycSoupcon ?? current.kycSoupcon;
+            const finalDeclaration = dto.declarationSoupcon === undefined ? current.declarationSoupcon : dto.declarationSoupcon;
+            if (finalSuspicion && !hasKycDeclaration(finalDeclaration)) {
+              throw new BadRequestException('La déclaration du soupçon doit rester non vide tant que le soupçon est actif.');
+            }
+          }
+          if (dto.clientId !== undefined && !await tx.client.findUnique({ where: { id: dto.clientId }, select: { id: true } })) {
+            throw new NotFoundException('Client introuvable.');
+          }
+
           if (dto.avocatResponsableId !== undefined) {
             if (!dto.avocatResponsableId) {
               throw new BadRequestException('Identifiant de l’avocat responsable invalide.');
@@ -1354,13 +1164,9 @@ export class DossiersService {
                 statut:
                   dto.statut,
 
-                dateCloture:
-                  dto.statut ===
-                    'CLOTURE'
-                    ? new Date()
-                    : dto.statut
-                      ? null
-                      : undefined,
+                // Existing reopening rule: clear the closure date only on a real transition.
+                dateCloture: dto.statut === undefined || dto.statut === current.statut
+                  ? undefined : dto.statut === 'CLOTURE' ? new Date() : null,
 
                 clientId:
                   dto.clientId,
@@ -1369,13 +1175,9 @@ export class DossiersService {
                   dto
                     .avocatResponsableId,
 
-                avocatClientNom:
-                  dto.avocatClientNom ||
-                  null,
+                avocatClientNom: dto.avocatClientNom === undefined ? undefined : dto.avocatClientNom?.trim() || null,
 
-                avocatClientEmail:
-                  dto.avocatClientEmail ||
-                  null,
+                avocatClientEmail: dto.avocatClientEmail === undefined ? undefined : dto.avocatClientEmail?.trim() || null,
 
                 avocatClientTelephone:
                   dto.avocatClientTelephone === undefined
@@ -1407,14 +1209,6 @@ export class DossiersService {
               },
             });
         },
-
-        {
-          maxWait:
-            10_000,
-
-          timeout:
-            20_000,
-        },
       );
 
     await this.activityLog.log({
@@ -1438,14 +1232,15 @@ export class DossiersService {
       },
     });
 
-    return dossier;
+    return this.findOne(dossier.id, userId);
   }
 
   // ============================================================
   // LISTE DES FRAIS D'OUVERTURE
   // ============================================================
 
-  async findFraisOuverture() {
+  async findFraisOuverture(role?: Role) {
+    this.financePermissions.require(!!role && this.financePermissions.canViewFinance(role) && this.financePermissions.canViewCaisses(role), 'Accès financier refusé.');
     const frais =
       await this.prisma
         .fraisOuvertureDossier
@@ -1457,7 +1252,8 @@ export class DossiersService {
 
           include: {
             dossier: {
-              include: {
+              select: {
+                ...DOSSIER_REFERENCE_SELECT,
                 client:
                   true,
 
@@ -1742,126 +1538,32 @@ export class DossiersService {
   // ARCHIVAGE
   // ============================================================
 
-  async archive(
-    id: string,
-    userId: string,
-  ) {
-    const dossier =
-      await this.findOne(
-        id,
-      );
-
-    if (
-      dossier.statut !==
-      'CLOTURE'
-    ) {
-      throw new BadRequestException(
-        'Seul un dossier clôturé peut être archivé.',
-      );
-    }
-
-    if (
-      dossier.archive
-    ) {
-      return dossier;
-    }
-
-    const archivedDossier =
-      await this.prisma
-        .dossier.update({
-          where: {
-            id,
-          },
-
-          data: {
-            archive:
-              true,
-
-            archivedAt:
-              new Date(),
-          },
-        });
-
-    await this.activityLog.log({
-      userId,
-
-      action:
-        'DOSSIER_ARCHIVE',
-
-      entityType:
-        'Dossier',
-
-      entityId:
-        archivedDossier.id,
-
-      dossierId:
-        archivedDossier.id,
-
-      metadata: {
-        reference:
-          archivedDossier.reference,
-      },
+  async archive(id: string, userId: string) {
+    await this.findOne(id);
+    const result = await this.dossierTransaction(async tx => {
+      const current = await tx.dossier.findUniqueOrThrow({ where: { id } });
+      if (current.statut !== 'CLOTURE') throw new BadRequestException('Seul un dossier clôturé peut être archivé.');
+      if (current.archive) return { dossier: current, changed: false };
+      return { dossier: await tx.dossier.update({ where: { id }, data: { archive: true, archivedAt: new Date() } }), changed: true };
     });
-
-    return archivedDossier;
+    if (result.changed) await this.activityLog.log({
+      userId, action: 'DOSSIER_ARCHIVE', entityType: 'Dossier', entityId: id, dossierId: id,
+      metadata: { reference: result.dossier.reference },
+    });
+    return this.findOne(result.dossier.id, userId);
   }
 
-  // ============================================================
-  // DESARCHIVAGE
-  // ============================================================
-
-  async unarchive(
-    id: string,
-    userId: string,
-  ) {
-    const dossier =
-      await this.findOne(
-        id,
-      );
-
-    if (
-      !dossier.archive
-    ) {
-      return dossier;
-    }
-
-    const unarchivedDossier =
-      await this.prisma
-        .dossier.update({
-          where: {
-            id,
-          },
-
-          data: {
-            archive:
-              false,
-
-            archivedAt:
-              null,
-          },
-        });
-
-    await this.activityLog.log({
-      userId,
-
-      action:
-        'DOSSIER_DESARCHIVE',
-
-      entityType:
-        'Dossier',
-
-      entityId:
-        unarchivedDossier.id,
-
-      dossierId:
-        unarchivedDossier.id,
-
-      metadata: {
-        reference:
-          unarchivedDossier.reference,
-      },
+  async unarchive(id: string, userId: string) {
+    await this.findOne(id);
+    const result = await this.dossierTransaction(async tx => {
+      const current = await tx.dossier.findUniqueOrThrow({ where: { id } });
+      if (!current.archive) return { dossier: current, changed: false };
+      return { dossier: await tx.dossier.update({ where: { id }, data: { archive: false, archivedAt: null } }), changed: true };
     });
-
-    return unarchivedDossier;
+    if (result.changed) await this.activityLog.log({
+      userId, action: 'DOSSIER_DESARCHIVE', entityType: 'Dossier', entityId: id, dossierId: id,
+      metadata: { reference: result.dossier.reference },
+    });
+    return this.findOne(result.dossier.id, userId);
   }
 }

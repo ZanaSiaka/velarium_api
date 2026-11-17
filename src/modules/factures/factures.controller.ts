@@ -1,3 +1,5 @@
+import { UseGuards } from '@nestjs/common';
+import { FinancialDataGuard } from '../../common/guards/financial-data.guard';
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
@@ -6,6 +8,7 @@ import { FacturesService } from './factures.service';
 import { CreateFactureDto } from './dto/create-facture.dto';
 import { CreatePaiementDto } from './dto/create-paiement.dto';
 
+@UseGuards(FinancialDataGuard)
 @ApiTags('factures')
 @ApiBearerAuth()
 @Controller('factures')
@@ -20,6 +23,11 @@ export class FacturesController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.facturesService.findOne(id);
+  }
+
+  @Post('preview')
+  preview(@Body() dto: CreateFactureDto) {
+    return this.facturesService.preview(dto);
   }
 
   @Post()

@@ -31,6 +31,7 @@ export function readProvisionBalance(provision: {
   let avertissement: string | null = null;
   if (montantInitial === null || montantExplicite === null) avertissement = 'Montant indisponible ou précision non reconnue.';
   else if (legacy && provision.imputations.length > 0) avertissement = 'Affectation historique et imputations explicites coexistantes : arbitrage nécessaire.';
+  else if (legacy) avertissement = 'Le rattachement historique ne démontre pas le montant effectivement imputé : validation nécessaire.';
   else if (new Decimal(montantInitial).isNegative() || new Decimal(montantExplicite).isNegative()) avertissement = 'Montant négatif historique à vérifier.';
   else if (!legacy && new Decimal(montantExplicite).greaterThan(montantInitial)) avertissement = 'Les imputations dépassent le montant initial de la provision.';
   const montantImpute = avertissement ? null : legacy ? montantInitial : montantExplicite;

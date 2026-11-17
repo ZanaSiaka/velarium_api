@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Get, Header, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { AuthRateLimit, AuthRateLimitGuard } from './auth-rate-limit.guard';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { Public } from '../../common/decorators/public.decorator';
@@ -25,6 +26,9 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('login')
+  @Header('Cache-Control', 'private, no-store')
+  @UseGuards(AuthRateLimitGuard)
+  @AuthRateLimit({ action: 'login', windowMs: 300_000, ip: 30, identity: 10 })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -32,6 +36,8 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('forgot-password')
+  @UseGuards(AuthRateLimitGuard)
+  @AuthRateLimit({ action: 'forgot', windowMs: 900_000, ip: 10, identity: 3 })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
@@ -39,12 +45,15 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('reset-password')
+  @UseGuards(AuthRateLimitGuard)
+  @AuthRateLimit({ action: 'reset', windowMs: 900_000, ip: 20, identity: 5 })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
 
   @ApiBearerAuth()
   @Get('me')
+  @Header('Cache-Control', 'private, no-store')
   me(@CurrentUser() user: CurrentUserPayload) {
     return this.authService.me(user.id);
   }
@@ -52,6 +61,8 @@ export class AuthController {
   @ApiBearerAuth()
   @HttpCode(200)
   @Post('change-password')
+  @UseGuards(AuthRateLimitGuard)
+  @AuthRateLimit({ action: 'change', windowMs: 300_000, ip: 30, identity: 5 })
   changePassword(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: ChangePasswordDto,

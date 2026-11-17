@@ -1,29 +1,34 @@
-import { IsDateString, IsEnum, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { EvenementType } from '../../../../generated/prisma/client';
 
 export class CreateEvenementDto {
+  @IsString()
   @IsNotEmpty()
   title: string;
 
   @IsOptional()
-  description?: string;
+  @IsString()
+  description?: string | null;
 
-  @IsDateString()
+  @IsDateString({ strict: true })
   start: string;
 
   @IsOptional()
-  @IsDateString()
-  end?: string;
+  @IsDateString({ strict: true })
+  end?: string | null;
 
   @IsOptional()
-  color?: string;
+  @IsString()
+  color?: string | null;
 
   @IsEnum(EvenementType)
   eventType: EvenementType;
 
   @IsOptional()
-  location?: string;
+  @IsString()
+  location?: string | null;
 
   @IsOptional()
-  dossierId?: string;
+  @IsString()
+  dossierId?: string | null;
 }

@@ -1,18 +1,19 @@
 import {
   BadRequestException,
-  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
 import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 
 import { PrismaService } from '../../prisma/prisma.service';
-import { Role, User } from '../../../generated/prisma/client';
+import { Prisma, User } from '../../../generated/prisma/client';
+import { credentialTag, resetTokenFingerprint } from './auth-credentials';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -27,27 +28,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) { }
 
-  async register(dto: RegisterDto) {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-
-    if (existing) {
-      throw new ConflictException('Un compte existe déjà avec cet email.');
-    }
-
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-
-    const user = await this.prisma.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email,
-        passwordHash,
-        role: Role.COLLABORATEUR_ASSOCIE,
-      },
-    });
-
-    return this.buildAuthResponse(user);
+  async register(_dto: RegisterDto): Promise<never> {
+    throw new ForbiddenException('L’inscription publique est fermée. Contactez le cabinet.');
   }
 
   async login(dto: LoginDto) {
@@ -55,16 +37,9 @@ export class AuthService {
       where: { email: dto.email },
     });
 
-    if (!user) {
-      throw new UnauthorizedException('Email ou mot de passe incorrect.');
-    }
-
-    if (!user.active) {
-      throw new UnauthorizedException('Ce compte est inactif.');
-    }
-
-    const valid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!valid) {
+    // Same bcrypt work for an unknown email; no account-status disclosure.
+    const valid = await bcrypt.compare(dto.password, user?.passwordHash ?? '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy');
+    if (!user || !user.active || !valid) {
       throw new UnauthorizedException('Email ou mot de passe incorrect.');
     }
 
@@ -91,47 +66,28 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash },
+    await this.prisma.$transaction(async tx => {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`);
+      const current = await tx.user.findUnique({ where: { id: userId } });
+      if (!current?.active || current.passwordHash !== user.passwordHash) throw new UnauthorizedException('Les identifiants ont changé. Reconnectez-vous.');
+      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      await tx.passwordResetToken.updateMany({ where: { identifier: current.email, expires: { gt: new Date() } }, data: { expires: new Date() } });
     });
 
     return { success: true };
   }
 
-  // Pas d'envoi d'email pour ce pilote (hors périmètre) : le lien est
-  // loggé côté serveur. À remplacer par un vrai provider (Resend/SMTP).
-  async forgotPassword(dto: ForgotPasswordDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-
-    // Toujours répondre "succès", même si l'email n'existe pas.
-    if (!user) {
-      return { success: true };
-    }
-
-    const token = randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 1000 * 60 * 60); // 1h
-
-    await this.prisma.passwordResetToken.create({
-      data: { identifier: dto.email, token, expires },
-    });
-
-    const webUrl = process.env.WEB_URL ?? 'http://localhost:3000';
-    console.log(
-      `[Velarium API] Lien de réinitialisation pour ${dto.email} : ${webUrl}/auth/reset-password?token=${token}`,
-    );
-
-    return { success: true };
+  async forgotPassword(_dto: ForgotPasswordDto): Promise<never> {
+    // No transport exists: no fake delivery, no unusable tokens, no DB lookup.
+    throw new ServiceUnavailableException('La récupération par email est temporairement indisponible. Contactez le cabinet.');
   }
 
   async resetPassword(dto: ResetPasswordDto) {
     const resetToken = await this.prisma.passwordResetToken.findUnique({
-      where: { token: dto.token },
+      where: { token: resetTokenFingerprint(dto.token) },
     });
 
-    if (!resetToken || resetToken.expires < new Date()) {
+    if (!resetToken || resetToken.expires <= new Date()) {
       throw new BadRequestException(
         'Ce lien de réinitialisation est invalide ou a expiré.',
       );
@@ -139,13 +95,18 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    await this.prisma.user.update({
-      where: { email: resetToken.identifier },
-      data: { passwordHash },
-    });
-
-    await this.prisma.passwordResetToken.delete({
-      where: { token: dto.token },
+    await this.prisma.$transaction(async tx => {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "User" WHERE "email" = ${resetToken.identifier} FOR UPDATE`);
+      const current = await tx.user.findUnique({ where: { email: resetToken.identifier } });
+      const now = new Date();
+      if (!current?.active) throw new BadRequestException('Ce lien de réinitialisation est invalide ou a expiré.');
+      const consumed = await tx.passwordResetToken.updateMany({
+        where: { id: resetToken.id, token: resetTokenFingerprint(dto.token), expires: { gt: now } }, data: { expires: now },
+      });
+      if (consumed.count !== 1) throw new BadRequestException('Ce lien de réinitialisation est invalide ou a expiré.');
+      await tx.user.update({ where: { id: current.id }, data: { passwordHash } });
+      // Preserve historical rows; expire all remaining recovery capabilities.
+      await tx.passwordResetToken.updateMany({ where: { identifier: current.email, expires: { gt: now } }, data: { expires: now } });
     });
 
     return { success: true };
@@ -202,7 +163,7 @@ export class AuthService {
   }
 
   private buildAuthResponse(user: User) {
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = { sub: user.id, email: user.email, role: user.role, credentialTag: credentialTag(user) };
 
     return {
       accessToken: this.jwtService.sign(payload),

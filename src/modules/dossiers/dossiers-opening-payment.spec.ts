@@ -31,6 +31,8 @@ describe('DossiersService mandatory opening payment', () => {
       client: { findUnique: jest.fn().mockResolvedValue({ id: 'client', nom: 'Client' }) },
       caisse: { findUnique: jest.fn().mockResolvedValue({ id: 'caisse', nom: 'Caisse', type: 'ESPECES', active: true, devise: 'XOF', institution: null, moyensOperation: [MoyenOperationCompte.ESPECES] }) },
       dossier: {
+        count: jest.fn().mockResolvedValue(0),
+        findUnique: jest.fn().mockResolvedValue(null),
         create: create('dossier'),
         findUniqueOrThrow: jest.fn(async () => ({
           id: 'dossier', reference: '2026-001',
@@ -40,9 +42,10 @@ describe('DossiersService mandatory opening payment', () => {
       },
       mouvementFinance: { create: create('mouvement') },
       fraisOuvertureDossier: { create: create('frais') },
-      recuEncaissement: { count: jest.fn().mockResolvedValue(0), create: create('recu') },
+      recuEncaissement: { count: jest.fn().mockResolvedValue(0), findUnique: jest.fn().mockResolvedValue(null), create: create('recu') },
     };
     prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'encaisseur', active: true, role: Role.AVOCAT }) },
       dossier: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([structuredClone(legacy)]), findUnique: jest.fn().mockResolvedValue({ ...structuredClone(legacy), factures: [], provisions: [] }) },
       // Model the transaction boundary; this verifies the service contract, not PostgreSQL rollback.
       $transaction: jest.fn(async (callback) => {
@@ -112,8 +115,9 @@ describe('DossiersService mandatory opening payment', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(committed.map((w) => w.table)).toEqual(['dossier', 'mouvement', 'frais', 'recu']);
     expect(tx.mouvementFinance.create).toHaveBeenCalledWith({ data: expect.objectContaining({ type: 'ENTREE', montant: 1000, caisseId: 'caisse', moyenPaiement: 'ESPECES', dossierId: 'dossier', userId: 'encaisseur' }) });
-    expect(result.fraisOuverture).toMatchObject({ statut: 'PAYE', montant: 1000, mouvementFinanceId: 'mouvement', factureId: null });
-    expect(result.recusEncaissement).toEqual([expect.objectContaining({ montant: 1000, dossierId: 'dossier', mouvementFinanceId: 'mouvement', createdById: 'encaisseur' })]);
+    expect(result).toBeDefined();
+    expect(committed.find(write => write.table === 'frais')?.data).toMatchObject({ statut: 'PAYE', montant: 1000, mouvementFinanceId: 'mouvement', factureId: null });
+    expect(committed.filter(write => write.table === 'recu').map(write => write.data)).toEqual([expect.objectContaining({ montant: 1000, dossierId: 'dossier', mouvementFinanceId: 'mouvement', createdById: 'encaisseur' })]);
     expect(log.log).toHaveBeenCalledTimes(1);
   });
   it('validates and deduplicates collaborators before creating the dossier', async () => {
@@ -144,7 +148,7 @@ describe('DossiersService mandatory opening payment', () => {
     expect(log.log).not.toHaveBeenCalled();
   });
   it('keeps historical unpaid dossiers readable and excludes unpaid fees from receipts', async () => {
-    const dossiers = await service.findAll();
+    const dossiers = await service.findAll('encaisseur');
     expect(dossiers[0].fraisOuverture).toMatchObject({ statut: 'A_PAYER', statutAffichage: 'IMPAYE' });
     const book = await service.getLivrePaiements('legacy', Role.AVOCAT);
     expect(book.totalFraisOuvertureEncaisse).toBe(0);

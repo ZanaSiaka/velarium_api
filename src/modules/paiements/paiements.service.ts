@@ -1,3 +1,4 @@
+import { DOSSIER_REFERENCE_SELECT } from '../../common/dossier-projections';
 import {
     Injectable,
 } from '@nestjs/common';
@@ -31,8 +32,7 @@ export class PaiementsService {
                                 client:
                                     true,
 
-                                dossier:
-                                    true,
+                                dossier: { select: DOSSIER_REFERENCE_SELECT },
                             },
                         },
 
@@ -72,7 +72,7 @@ export class PaiementsService {
 
                     include: {
                         dossier: {
-                            include: {
+                            select: { ...DOSSIER_REFERENCE_SELECT,
                                 client:
                                     true,
                             },
@@ -126,6 +126,7 @@ export class PaiementsService {
                         Number(
                             paiement.montant,
                         ),
+                    montantExact: paiement.montant.toFixed(2),
 
                     moyenPaiement:
                         paiement.moyenPaiement,
@@ -205,6 +206,7 @@ export class PaiementsService {
                         Number(
                             provision.montant,
                         ),
+                    montantExact: provision.montant.toFixed(2),
 
                     moyenPaiement:
                         provision.moyenPaiement,

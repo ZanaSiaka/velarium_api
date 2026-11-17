@@ -13,7 +13,7 @@ export class CreateImputationProvisionDto {
     factureId: string;
 
     @Type(() => Number)
-    @IsNumber()
+    @IsNumber({ maxDecimalPlaces: 2 })
     @Min(0.01)
     montant: number;
 }

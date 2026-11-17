@@ -97,8 +97,9 @@ export class CreateDossierDto {
   // KYC
   // ============================================================
 
+  @ValidateIf((_dto, value) => value !== undefined)
   @IsBoolean()
-  kycSoupcon: boolean;
+  kycSoupcon?: boolean;
 
   @Validate(KycDeclarationValidator)
   declarationSoupcon?: string | null;

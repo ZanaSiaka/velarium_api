@@ -1,3 +1,5 @@
+import { UseGuards } from '@nestjs/common';
+import { FinancialDataGuard } from '../../common/guards/financial-data.guard';
 import {
   Body,
   Controller,
@@ -40,6 +42,7 @@ type AuthenticatedRequest =
     };
   };
 
+@UseGuards(FinancialDataGuard)
 @ApiTags('provisions')
 @ApiBearerAuth()
 @Controller('provisions')
@@ -130,6 +133,7 @@ export class ProvisionsController {
 
   @Delete(':id/imputations/:imputationId')
   removeImputation(
+    @Req() request: AuthenticatedRequest,
     @Param('id')
     provisionId: string,
 
@@ -139,6 +143,7 @@ export class ProvisionsController {
     return this.provisionsService.removeImputation(
       provisionId,
       imputationId,
+      request.user?.id ?? request.user?.userId ?? request.user?.sub,
     );
   }
 }

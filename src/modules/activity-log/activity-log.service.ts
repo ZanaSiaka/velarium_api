@@ -3,6 +3,7 @@ import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/c
 import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, Role } from '../../../generated/prisma/client';
 import { DossierHistoryQueryDto } from './dto/dossier-history-query.dto';
+import { FinancePermissionService } from '../finance/finance-permission.service';
 
 const DOSSIER_HISTORY_LABELS: Record<string, string> = {
   DOSSIER_CREE: 'Dossier créé',
@@ -22,8 +23,8 @@ export class ActivityLogService {
     entityId: string;
     dossierId?: string;
     metadata?: Record<string, unknown>;
-  }) {
-    return this.prisma.activityLog.create({
+  }, db: Pick<Prisma.TransactionClient, 'activityLog'> = this.prisma) {
+    return db.activityLog.create({
       data: {
         userId: params.userId,
         action: params.action,
@@ -103,6 +104,14 @@ export class ActivityLogService {
         { entityType: { in: ['PersonneSuivie', 'DossierPersonne', 'SignalementSanction'], mode: 'insensitive' } },
       ] } },
     ];
+    if (!new FinancePermissionService().canViewAudit(user.role)) {
+      restrictions.push({ NOT: { OR: [
+        { entityType: { in: ['Caisse', 'MouvementFinance', 'Facture', 'Paiement', 'Provision', 'ImputationProvision', 'FraisOuvertureDossier', 'RecuEncaissement', 'PieceJointeFinance'], mode: 'insensitive' } },
+        { action: { startsWith: 'CAISSE', mode: 'insensitive' } },
+        { action: { startsWith: 'MOUVEMENT_FINANCIER', mode: 'insensitive' } },
+        { action: { startsWith: 'PIECE_JOINTE_FINANCE', mode: 'insensitive' } },
+      ] } });
+    }
     if (!canViewDossierHistory) {
       restrictions.push({ dossierId: null });
       // Also exclude legacy dossier records whose dossierId was not populated.

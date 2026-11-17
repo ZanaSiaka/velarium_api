@@ -37,18 +37,20 @@ export class DossiersController {
   // LISTE
   // ============================================================
 
+  @Header('Cache-Control', 'private, no-store')
   @Get()
-  findAll() {
-    return this.dossiersService.findAll()
+  findAll(@CurrentUser() user: CurrentUserPayload) {
+    return this.dossiersService.findAll(user.id)
   }
 
   // ============================================================
   // DOSSIERS ARCHIVÉS
   // ============================================================
 
+  @Header('Cache-Control', 'private, no-store')
   @Get('archives')
-  findArchived() {
-    return this.dossiersService.findArchived()
+  findArchived(@CurrentUser() user: CurrentUserPayload) {
+    return this.dossiersService.findArchived(user.id)
   }
 
   // ============================================================
@@ -74,21 +76,24 @@ export class DossiersController {
     await this.dossiersService.findOne(id)
     return this.activityLogService.findDossierHistory(id, user.id, query)
   }
+  @Header('Cache-Control', 'private, no-store')
   @Get('frais-ouverture')
-  findFraisOuverture() {
+  findFraisOuverture(@CurrentUser() user: CurrentUserPayload) {
     return this.dossiersService
-      .findFraisOuverture();
+      .findFraisOuverture(user.role);
   }
 
+  @Header('Cache-Control', 'private, no-store')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.dossiersService.findOne(id)
+  findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.dossiersService.findOne(id, user.id)
   }
 
   // ============================================================
   // CRÉATION
   // ============================================================
 
+  @Header('Cache-Control', 'private, no-store')
   @Post()
   create(
     @Body() dto: CreateDossierDto,
@@ -104,6 +109,7 @@ export class DossiersController {
   // MODIFICATION
   // ============================================================
 
+  @Header('Cache-Control', 'private, no-store')
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -121,6 +127,7 @@ export class DossiersController {
   // ARCHIVAGE
   // ============================================================
 
+  @Header('Cache-Control', 'private, no-store')
   @Patch(':id/archive')
   archive(
     @Param('id') id: string,
@@ -136,6 +143,7 @@ export class DossiersController {
   // DÉSARCHIVAGE
   // ============================================================
 
+  @Header('Cache-Control', 'private, no-store')
   @Patch(':id/unarchive')
   unarchive(
     @Param('id') id: string,

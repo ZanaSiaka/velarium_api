@@ -1,9 +1,10 @@
+import { BillingCash, readInvoiceBalance, recognizedCash } from '../../common/finance/billing';
 import { MoneyValue, exactMoney, readProvisionBalance, remainingMoney, sumMoney } from '../../common/finance/financial-read';
 
 type Receipt = { id: string; numero: string; dateEmission: Date; montant: MoneyValue; type: string; dossierId: string };
-type Movement = { id: string; moyenPaiement?: string | null; caisse: { devise: string }; recuEncaissement: Receipt | null };
+type Movement = BillingCash & { id: string; moyenPaiement?: string | null; caisse: { devise: string }; recuEncaissement: Receipt | null };
 type Provision = {
-  id: string; montant: MoneyValue; factureId: string | null; datePaiement: Date;
+  id: string; dossierId: string; montant: MoneyValue; factureId: string | null; datePaiement: Date;
   moyenPaiement: string | null; note: string | null; mouvementFinanceId: string | null;
   mouvementFinance: Movement | null; imputations: { factureId: string; montant: MoneyValue }[];
 };
@@ -13,6 +14,8 @@ type Payment = {
 };
 type Invoice = {
   id: string; numero: string; statut: string; montantTTC: MoneyValue; dateEmission: Date; dateEcheance: Date;
+  montantHT?: MoneyValue; montantTVA?: MoneyValue;
+  lignes?: { montant: MoneyValue; quantite: MoneyValue; prixUnitaire: MoneyValue }[];
   paiements: Payment[]; provisions: { id: string }[];
   imputationsProvision: { provisionId: string; montant: MoneyValue }[];
 };
@@ -44,12 +47,12 @@ export function readDossierFinance(dossier: DossierFinanceInput) {
   if (!currenciesKnown) warnings.add('Certaines provisions ont une devise absente ou différente de XOF : les agrégats concernés sont indisponibles.');
   for (const row of dossier.provisions) {
     const balance = balances.get(row.id)!;
-    if (balance.avertissement) warnings.add(`Provision ${row.id} : ${balance.avertissement}`);
+    if (balance.avertissement) warnings.add(`Provision historique : ${balance.avertissement}`);
     if ((row.factureId && !invoiceIds.has(row.factureId)) || row.imputations.some(item => !invoiceIds.has(item.factureId))) {
       balance.montantImpute = null; balance.montantDisponible = null;
       balance.mode = 'AMBIGUE';
       balance.avertissement = 'Une affectation vise une facture hors du dossier : vérification nécessaire.';
-      warnings.add(`Provision ${row.id} : ${balance.avertissement}`);
+      warnings.add(`Provision : ${balance.avertissement}`);
     }
   }
 
@@ -71,61 +74,62 @@ export function readDossierFinance(dossier: DossierFinanceInput) {
       devise: currency(payment.mouvementFinance), moyenPaiement: payment.mouvementFinance?.moyenPaiement ?? payment.moyenPaiement,
       note: payment.note, facture: { id: invoice.id, numero: invoice.numero },
       recu: receipt(payment.mouvementFinance),
+      encaissementConfirme: recognizedCash(payment.montant, payment.mouvementFinance, dossier.id, 'PAIEMENT_FACTURE') !== null,
     }));
-    const paid = paiements.every(row => row.devise === devise) ? sumMoney(paiements.map(row => row.montant)) : null;
-    if (paid === null) warnings.add(`Facture ${invoice.numero} : devise ou montant d’un paiement non confirmé.`);
-    const explicit = invoice.imputationsProvision.map(item => {
-      const provision = provisionMap.get(item.provisionId);
-      const balance = balances.get(item.provisionId);
-      return provision && balance?.montantImpute !== null && balance?.montantImpute !== undefined && currency(provision.mouvementFinance) === devise
-        ? exactMoney(item.montant) : null;
+    const balance = readInvoiceBalance({
+      ...invoice, dossierId: dossier.id,
+      imputationsProvision: invoice.imputationsProvision.map(item => ({ ...item, provision: provisionMap.get(item.provisionId) ?? null })),
     });
-    const legacy = invoice.provisions.map(item => {
-      const provision = provisionMap.get(item.id);
-      return provision?.factureId === invoice.id && currency(provision.mouvementFinance) === devise
-        ? balances.get(item.id)?.montantImpute ?? null : null;
-    });
-    const applied = duplicatedCash ? null : sumMoney([...explicit, ...legacy]);
-    const settled = sumMoney([paid, applied]);
-    const ttc = exactMoney(invoice.montantTTC);
-    return { id: invoice.id, numero: invoice.numero, statut: invoice.statut,
-      dateEmission: invoice.dateEmission, dateEcheance: invoice.dateEcheance,
-      devise, montantTTC: ttc, montantRegle: settled, resteAPayer: remainingMoney(ttc, settled), paiements };
+    balance.avertissements.forEach(message => warnings.add("Facture " + invoice.numero + " : " + message));
+    return { id: invoice.id, numero: invoice.numero, statut: invoice.statut, statutCalcule: balance.statutCalcule,
+      dateEmission: invoice.dateEmission, dateEcheance: invoice.dateEcheance, eligible: balance.eligible,
+      devise, montantTTC: balance.montantTTC, montantRegle: balance.totalRegle, resteAPayer: balance.solde,
+      tropPercu: balance.tropPercu, reglementAutorise: balance.reglementAutorise,
+      avertissements: balance.avertissements, totalPaiementsReconnu: balance.totalPaiements, paiements };
   });
   const provisions = dossier.provisions.map(row => ({
     id: row.id, date: row.datePaiement, devise: currency(row.mouvementFinance),
     factureId: row.factureId, note: row.note, ...balances.get(row.id)!,
     moyenPaiement: row.mouvementFinance?.moyenPaiement ?? row.moyenPaiement,
     recu: receipt(row.mouvementFinance),
+    encaissementConfirme: recognizedCash(row.montant, row.mouvementFinance, dossier.id, 'PROVISION') !== null,
     imputations: row.imputations.map(item => ({ factureId: item.factureId, montant: exactMoney(item.montant) })),
   }));
-  const allPayments = factures.flatMap(row => row.paiements);
-  const totalPaiements = allPayments.every(row => row.devise === devise) ? sumMoney(allPayments.map(row => row.montant)) : null;
-  const totalProvisionsEncaissees = currenciesKnown ? sumMoney(provisions.map(row => row.montantInitial)) : null;
+  const totalPaiements = sumMoney(factures.map(row => row.totalPaiementsReconnu));
+  const totalProvisionsEncaissees = sumMoney(dossier.provisions.map(row => recognizedCash(row.montant, row.mouvementFinance, dossier.id, 'PROVISION')));
   const totalProvisions = currenciesKnown ? sumMoney(provisions.map(row => row.montantImpute)) : null;
   const totalProvisionsDisponibles = currenciesKnown ? sumMoney(provisions.map(row => row.montantDisponible)) : null;
   const totalProvisionsImputees = currenciesKnown ? sumMoney(dossier.provisions.flatMap(row => row.imputations.map(item => exactMoney(item.montant)))) : null;
   const totalProvisionsLegacy = currenciesKnown ? sumMoney(provisions.filter(row => row.factureId !== null).map(row => row.montantImpute)) : null;
   const fee = dossier.fraisOuverture;
+  const linkedInvoice = fee?.factureId ? factures.find(row => row.id === fee.factureId) : undefined;
+  const settledThroughInvoice = !!linkedInvoice && linkedInvoice.resteAPayer === '0.00' && linkedInvoice.montantRegle !== null;
   const totalFraisOuvertureEncaisse = !fee ? null : fee.statut !== 'PAYE' ? '0.00'
-    : currency(fee.mouvementFinance) === devise ? exactMoney(fee.montant) : null;
+    : fee.mouvementFinance ? recognizedCash(fee.montant, fee.mouvementFinance, dossier.id, 'FRAIS_OUVERTURE_DOSSIER')
+    : settledThroughInvoice ? exactMoney(fee.montant) : null;
   if (!fee) warnings.add('Frais d’ouverture non enregistrés : montant encaissé indisponible.');
   else if (fee.statut === 'PAYE' && totalFraisOuvertureEncaisse === null) warnings.add('Frais d’ouverture historiques : encaissement ou devise non confirmé.');
-  const legacyOpeningInvoice = fee?.factureId && factures.find(row => row.id === fee.factureId);
-  const openingAmbiguity = !!legacyOpeningInvoice && legacyOpeningInvoice.montantRegle !== '0.00';
+  const openingAmbiguity = !!fee?.factureId && (!!fee.mouvementFinance || !linkedInvoice);
   if (openingAmbiguity) warnings.add('Frais d’ouverture liés à une ancienne facture réglée ou non réconciliée : encaissement global indisponible.');
-  if (factures.some(row => row.statut === 'BROUILLON')) warnings.add('Le total TTC conserve le périmètre historique incluant les brouillons. Leur exclusion exige une décision métier.');
-  const totalFacture = sumMoney(factures.map(row => row.montantTTC));
-  const totalRegleFactures = duplicatedCash ? null : sumMoney(factures.map(row => row.montantRegle));
+  if (factures.some(row => !row.eligible)) warnings.add('Les brouillons sont présentés séparément et exclus des créances exigibles.');
+  const eligibleInvoices = factures.filter(row => row.eligible);
+  const totalBrouillons = sumMoney(factures.filter(row => !row.eligible).map(row => row.montantTTC));
+  const totalFacture = sumMoney(eligibleInvoices.map(row => row.montantTTC));
+  const totalRegleFactures = duplicatedCash ? null : sumMoney(eligibleInvoices.map(row => row.montantRegle));
   const totalEncaisse = duplicatedCash ? null : sumMoney([totalPaiements, totalProvisionsEncaissees]);
-  const totalEncaisseGlobal = duplicatedCash || openingAmbiguity ? null : sumMoney([totalEncaisse, totalFraisOuvertureEncaisse]);
-  const montants = { totalFacture, totalPaiements, totalProvisions, totalProvisionsEncaissees,
+  // A fee billed through an invoice is already included in payments/provisions cash flows.
+  const totalEncaisseGlobal = duplicatedCash || openingAmbiguity ? null : fee?.factureId ? totalEncaisse : sumMoney([totalEncaisse, totalFraisOuvertureEncaisse]);
+  const montants = { totalFacture, totalBrouillons, totalPaiements, totalProvisions, totalProvisionsEncaissees,
     totalProvisionsImputees, totalProvisionsLegacy, totalProvisionsDisponibles, totalRegleFactures,
     totalFraisOuvertureEncaisse, totalEncaisse, totalEncaisseGlobal,
-    resteAPayer: remainingMoney(totalFacture, totalRegleFactures), tropPercu: remainingMoney(totalRegleFactures, totalFacture) };
-  return { version: 2, devise, perimetreFactures: 'TOUS_STATUTS_HISTORIQUE', montants,
+    resteAPayer: duplicatedCash ? null : sumMoney(eligibleInvoices.map(row => row.resteAPayer)), tropPercu: duplicatedCash ? null : sumMoney(eligibleInvoices.map(row => row.tropPercu)) };
+  return { version: 2, devise, perimetreFactures: 'HORS_BROUILLONS', montants,
     factures, provisions, fraisOuverture: fee ? {
       montant: exactMoney(fee.montant), statut: fee.statut, devise: currency(fee.mouvementFinance),
+      facture: linkedInvoice ? { id: linkedInvoice.id, numero: linkedInvoice.numero } : null,
+      facturation: openingAmbiguity ? 'A_VERIFIER' : fee.factureId ? 'FACTURE' : 'NON_FACTURE',
+      encaissement: openingAmbiguity || totalFraisOuvertureEncaisse === null ? 'A_VERIFIER'
+        : fee.statut !== 'PAYE' ? 'NON_CONFIRME' : fee.factureId ? 'VIA_FACTURE' : 'DIRECT',
       datePaiement: fee.datePaiement, moyenPaiement: fee.mouvementFinance?.moyenPaiement ?? null,
       recu: receipt(fee.mouvementFinance),
     } : null,

@@ -1,5 +1,8 @@
+import { CreateDossierExpenseDto } from './dto/create-dossier-expense.dto';
 import {
     Body,
+    Headers,
+    Header,
     DefaultValuePipe,
     ParseBoolPipe,
     Controller,
@@ -219,6 +222,22 @@ export class FinanceController {
         );
     }
 
+    @Get('comptes-depenses')
+    @Header('Cache-Control', 'private, no-store')
+    listDossierExpenseAccounts(@CurrentUser() user: CurrentUserPayload) {
+        return this.financeService.listDossierExpenseAccounts(user.role);
+    }
+
+    @Post('dossiers/:dossierId/depenses')
+    createDossierExpense(
+        @Param('dossierId') dossierId: string,
+        @Body() dto: CreateDossierExpenseDto,
+        @CurrentUser() user: CurrentUserPayload,
+        @Headers('idempotency-key') requestKey?: string,
+    ) {
+        return this.financeService.createDossierExpense(dossierId, dto, user.id, user.role, requestKey);
+    }
+
     @Post('mouvements')
     createMouvement(
         @Body()
@@ -244,7 +263,7 @@ export class FinanceController {
      * Génère une URL présignée permettant au navigateur
      * d'envoyer directement le fichier vers Cloudflare R2.
      *
-     * COMPTABLE uniquement.
+     * Selon FinancePermissionService.
      */
     @Post(
         'mouvements/:mouvementId/pieces-jointes/presign',
@@ -266,6 +285,7 @@ export class FinanceController {
             mouvementId,
             dto,
             user.role,
+            user.id,
         );
     }
 
@@ -277,6 +297,7 @@ export class FinanceController {
     @Get(
         'mouvements/:mouvementId/pieces-jointes',
     )
+    @Header('Cache-Control', 'private, no-store')
     findFinanceAttachments(
         @Param('mouvementId')
         mouvementId:
@@ -296,7 +317,7 @@ export class FinanceController {
      * Enregistre en base les métadonnées d'un fichier
      * déjà envoyé dans R2.
      *
-     * COMPTABLE uniquement.
+     * Selon FinancePermissionService.
      */
     @Post(
         'mouvements/:mouvementId/pieces-jointes',
@@ -330,6 +351,7 @@ export class FinanceController {
     @Get(
         'pieces-jointes/:id/view',
     )
+    @Header('Cache-Control', 'private, no-store')
     viewFinanceAttachment(
         @Param('id')
         id:
@@ -354,6 +376,7 @@ export class FinanceController {
     @Get(
         'pieces-jointes/:id/download',
     )
+    @Header('Cache-Control', 'private, no-store')
     downloadFinanceAttachment(
         @Param('id')
         id:
@@ -373,7 +396,7 @@ export class FinanceController {
     /**
      * Supprime le fichier R2 puis son entrée Prisma.
      *
-     * COMPTABLE uniquement.
+     * Selon FinancePermissionService.
      */
     @Delete(
         'pieces-jointes/:id',

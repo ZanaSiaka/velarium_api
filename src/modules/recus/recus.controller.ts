@@ -1,3 +1,5 @@
+import { UseGuards } from '@nestjs/common';
+import { FinancialDataGuard } from '../../common/guards/financial-data.guard';
 import {
     Controller,
     Get,
@@ -21,6 +23,7 @@ import {
     RecusService,
 } from './recus.service';
 
+@UseGuards(FinancialDataGuard)
 @ApiTags('recus')
 @ApiBearerAuth()
 @Controller('recus')

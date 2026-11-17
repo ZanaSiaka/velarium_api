@@ -25,11 +25,11 @@ describe('DossiersService partial updates', () => {
     };
     tx = {
       user: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'avocat', active: true }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'avocat', active: true, role: 'AVOCAT' }),
         findMany: jest.fn().mockImplementation(async ({ where }) => where.id.in.map((id) => ({ id }))),
       },
       dossierCollaborateur: { deleteMany: jest.fn().mockImplementation(async () => { stored.collaborateurs = []; }) },
-      dossier: { findUniqueOrThrow: jest.fn().mockImplementation(async () => ({ kycSoupcon: stored.kycSoupcon, declarationSoupcon: stored.declarationSoupcon })), update: jest.fn().mockImplementation(async ({ data }) => {
+      dossier: { findUniqueOrThrow: jest.fn().mockImplementation(async () => ({ statut: stored.statut, dateCloture: stored.dateCloture, archive: stored.archive, kycSoupcon: stored.kycSoupcon, declarationSoupcon: stored.declarationSoupcon })), update: jest.fn().mockImplementation(async ({ data }) => {
         for (const [key, value] of Object.entries(data)) {
           if (value !== undefined && key !== 'collaborateurs') stored[key] = value;
         }
@@ -154,7 +154,7 @@ describe('DossiersService partial updates', () => {
     await service.update('dossier', { natureAffaire: 'Legacy' }, 'user');
     expect(stored.kycSoupcon).toBe(true);
     expect(stored.declarationSoupcon).toBeNull();
-    expect(tx.dossier.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(tx.dossier.findUniqueOrThrow).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'dossier' } }));
   });
   it('rejects activating suspicion without an existing or supplied declaration', async () => {
     stored.kycSoupcon = false;

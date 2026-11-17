@@ -2,11 +2,13 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { validCredentialTag } from './auth-credentials';
 
 export type JwtPayload = {
   sub: string;
   email: string;
   role: string;
+  credentialTag?: string;
 };
 
 @Injectable()
@@ -20,12 +22,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    if (typeof payload.sub !== 'string' || !payload.sub) throw new UnauthorizedException('Session invalide.');
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, role: true, active: true },
+      select: { id: true, email: true, role: true, active: true, passwordHash: true },
     });
 
-    if (!user || !user.active) {
+    if (!user || !user.active || !validCredentialTag(payload.credentialTag, user)) {
       throw new UnauthorizedException(
         'Session expirée ou compte inactif.',
       );

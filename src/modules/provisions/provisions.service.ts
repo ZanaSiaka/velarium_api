@@ -1,67 +1,15 @@
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { MoyenOperationCompte, Prisma } from '../../../generated/prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateProvisionDto } from './dto/create-provision.dto';
+import { CreateImputationProvisionDto } from './dto/create-imputation-provision.dto';
+import { lockTreasuryAccounts, treasuryTransaction } from '../../common/finance/treasury';
 import { readProvisionBalance } from '../../common/finance/financial-read';
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-
-import {
-  FactureStatut,
-  MoyenOperationCompte,
-} from '../../../generated/prisma/client';
-
-import {
-  PrismaService,
-} from '../../prisma/prisma.service';
-
-import {
-  CreateProvisionDto,
-} from './dto/create-provision.dto';
-
-import {
-  CreateImputationProvisionDto,
-} from './dto/create-imputation-provision.dto';
-
-function num(
-  value: unknown,
-): number {
-  return Number(value);
-}
+import { allocateBillingNumber, BILLING_INVOICE_INCLUDE, BILLING_PROVISION_INCLUDE, billingAmount, lockBillingRows, readInvoiceBalance, recognizedCash, resolveInvoiceStatus, serializeBillingProvision } from '../../common/finance/billing';
 
 @Injectable()
 export class ProvisionsService {
-  constructor(
-    private readonly prisma:
-      PrismaService,
-  ) { }
-
-  // ============================================================
-  // STATUT D'UNE FACTURE
-  // ============================================================
-
-  private resolveFactureStatut(
-    totalRegle: number,
-    montantTTC: number,
-  ): FactureStatut {
-    if (
-      totalRegle >= montantTTC
-    ) {
-      return FactureStatut.PAYEE;
-    }
-
-    if (
-      totalRegle > 0
-    ) {
-      return FactureStatut.PARTIELLEMENT_PAYEE;
-    }
-
-    return FactureStatut.ENVOYEE;
-  }
-
-  // ============================================================
-  // MOYENS DE PAIEMENT AUTORISES
-  // ============================================================
-
+  constructor(private readonly prisma: PrismaService) {}
   private getMoyensAutorises(
     typeCompte: string,
     moyensConfigures:
@@ -132,230 +80,21 @@ export class ProvisionsService {
   // LISTE DES PROVISIONS
   // ============================================================
 
-  async findAll(
-    dossierId?: string,
-  ) {
-    const provisions =
-      await this.prisma
-        .provision
-        .findMany({
-          where:
-            dossierId
-              ? {
-                dossierId,
-              }
-              : undefined,
 
-          orderBy: {
-            datePaiement:
-              'desc',
-          },
-
-          include: {
-            // ====================================================
-            // LEGACY
-            // ====================================================
-
-            facture: {
-              select: {
-                id: true,
-                numero: true,
-                montantTTC: true,
-              },
-            },
-
-            // ====================================================
-            // NOUVELLES IMPUTATIONS
-            // ====================================================
-
-            imputations: {
-              orderBy: {
-                dateImputation:
-                  'asc',
-              },
-
-              include: {
-                facture: {
-                  select: {
-                    id: true,
-                    numero: true,
-                    montantTTC: true,
-                    statut: true,
-                  },
-                },
-
-                createdBy: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-              },
-            },
-
-            // ====================================================
-            // FINANCE + RECU
-            // ====================================================
-
-            mouvementFinance: {
-              include: {
-                caisse: {
-                  select: {
-                    id: true,
-                    nom: true,
-                    type: true,
-                    institution: true,
-                    identifiant: true,
-                    titulaire: true,
-                    devise: true,
-                    active: true,
-                  },
-                },
-
-                recuEncaissement:
-                  true,
-              },
-            },
-          },
-        });
-
-    return provisions.map(
-      (provision) => {
-        const montant =
-          num(
-            provision.montant,
-          );
-
-        const lectureFinanciere = readProvisionBalance(provision);
-        const montantImpute = lectureFinanciere.montantImpute === null ? null : Number(lectureFinanciere.montantImpute);
-        const montantDisponible = lectureFinanciere.montantDisponible === null ? null : Number(lectureFinanciere.montantDisponible);
-
-        return {
-          ...provision,
-          lectureFinanciere,
-
-          montant,
-
-          montantImpute,
-
-          montantDisponible,
-
-          // ================================================
-          // LEGACY
-          // ================================================
-
-          facture:
-            provision.facture
-              ? {
-                ...provision.facture,
-
-                montantTTC:
-                  num(
-                    provision
-                      .facture
-                      .montantTTC,
-                  ),
-              }
-              : null,
-
-          // ================================================
-          // IMPUTATIONS
-          // ================================================
-
-          imputations:
-            provision.imputations.map(
-              (
-                imputation,
-              ) => ({
-                ...imputation,
-
-                montant:
-                  num(
-                    imputation.montant,
-                  ),
-
-                facture: {
-                  ...imputation.facture,
-
-                  montantTTC:
-                    num(
-                      imputation
-                        .facture
-                        .montantTTC,
-                    ),
-                },
-              }),
-            ),
-
-          // ================================================
-          // FINANCE
-          // ================================================
-
-          mouvementFinance:
-            provision
-              .mouvementFinance
-              ? {
-                ...provision
-                  .mouvementFinance,
-
-                montant:
-                  num(
-                    provision
-                      .mouvementFinance
-                      .montant,
-                  ),
-
-                recuEncaissement:
-                  provision
-                    .mouvementFinance
-                    .recuEncaissement
-                    ? {
-                      ...provision
-                        .mouvementFinance
-                        .recuEncaissement,
-
-                      montant:
-                        num(
-                          provision
-                            .mouvementFinance
-                            .recuEncaissement
-                            .montant,
-                        ),
-                    }
-                    : null,
-              }
-              : null,
-        };
-      },
-    );
+  async findAll(dossierId?: string) {
+    const rows = await this.prisma.provision.findMany({ where: dossierId ? { dossierId } : undefined, orderBy: { datePaiement: 'desc' }, include: BILLING_PROVISION_INCLUDE });
+    return rows.map(serializeBillingProvision);
   }
-
-  // ============================================================
-  // CREATION / ENCAISSEMENT D'UNE PROVISION
-  // ============================================================
 
   async create(
     dto: CreateProvisionDto,
     userId: string,
   ) {
+    const money = billingAmount(dto.montant);
     // ============================================================
     // VALIDATION MONTANT
     // ============================================================
 
-    if (
-      !Number.isFinite(
-        dto.montant,
-      ) ||
-      dto.montant <= 0
-    ) {
-      throw new BadRequestException(
-        'Le montant de la provision doit être supérieur à zéro.',
-      );
-    }
-
-    // ============================================================
-    // VALIDATION DATE
-    // ============================================================
 
     const datePaiement =
       dto.datePaiement
@@ -394,9 +133,9 @@ export class ProvisionsService {
     // ============================================================
 
     const provision =
-      await this.prisma
-        .$transaction(
+      await treasuryTransaction(this.prisma,
           async (tx) => {
+            await lockTreasuryAccounts(tx, [dto.caisseId]);
             // ====================================================
             // DOSSIER + CLIENT
             // ====================================================
@@ -504,67 +243,7 @@ export class ProvisionsService {
             // NUMERO DU RECU
             // ====================================================
 
-            const year =
-              datePaiement
-                .getFullYear();
-
-            const lastReceipt =
-              await tx
-                .recuEncaissement
-                .findFirst({
-                  where: {
-                    numero: {
-                      startsWith:
-                        `REC-${year}-`,
-                    },
-                  },
-
-                  orderBy: {
-                    numero:
-                      'desc',
-                  },
-
-                  select: {
-                    numero:
-                      true,
-                  },
-                });
-
-            let nextReceiptNumber =
-              1;
-
-            if (
-              lastReceipt
-            ) {
-              const lastNumber =
-                Number(
-                  lastReceipt
-                    .numero
-                    .split('-')
-                    .pop(),
-                );
-
-              if (
-                Number.isFinite(
-                  lastNumber,
-                )
-              ) {
-                nextReceiptNumber =
-                  lastNumber + 1;
-              }
-            }
-
-            const numeroRecu =
-              `REC-${year}-${String(
-                nextReceiptNumber,
-              ).padStart(
-                4,
-                '0',
-              )}`;
-
-            // ====================================================
-            // MOUVEMENT FINANCE
-            // ====================================================
+            const numeroRecu = await allocateBillingNumber(tx, 'REC', datePaiement.getUTCFullYear());
 
             const mouvement =
               await tx
@@ -575,7 +254,7 @@ export class ProvisionsService {
                       'ENTREE',
 
                     montant:
-                      dto.montant,
+                      money,
 
                     categorie:
                       'PROVISION',
@@ -631,7 +310,7 @@ export class ProvisionsService {
                       dossier.id,
 
                     montant:
-                      dto.montant,
+                      money,
 
                     datePaiement,
 
@@ -690,7 +369,7 @@ export class ProvisionsService {
                     'PROVISION',
 
                   montant:
-                    dto.montant,
+                    money,
 
                   dateEmission:
                     datePaiement,
@@ -731,6 +410,11 @@ export class ProvisionsService {
             // RETOUR COMPLET
             // ====================================================
 
+            await tx.activityLog.create({ data: {
+              userId, action: 'PROVISION_ENCAISSEE', entityType: 'Provision', entityId: createdProvision.id, dossierId: dossier.id,
+              metadata: { mouvementFinanceId: mouvement.id, montantExact: money.toFixed(2), devise: caisse.devise,
+                caisseId: caisse.id, moyenPaiement: dto.moyenPaiement, dateMetier: datePaiement.toISOString(), numeroRecu },
+            } });
             return tx.provision
               .findUniqueOrThrow({
                 where: {
@@ -797,797 +481,80 @@ export class ProvisionsService {
               });
           },
 
-          {
-            maxWait:
-              10_000,
-
-            timeout:
-              20_000,
-          },
+          true,
         );
 
     // ============================================================
     // NORMALISATION RETOUR
     // ============================================================
 
-    const montant =
-      num(
-        provision.montant,
-      );
-
-    const montantImpute =
-      provision.imputations
-        .reduce(
-          (
-            total,
-            imputation,
-          ) =>
-            total +
-            num(
-              imputation.montant,
-            ),
-          0,
-        );
-
-    return {
-      ...provision,
-
-      montant,
-
-      montantImpute,
-
-      montantDisponible:
-        Math.max(
-          montant -
-          montantImpute,
-          0,
-        ),
-
-      imputations:
-        provision.imputations
-          .map(
-            (
-              imputation,
-            ) => ({
-              ...imputation,
-
-              montant:
-                num(
-                  imputation
-                    .montant,
-                ),
-
-              facture: {
-                ...imputation.facture,
-
-                montantTTC:
-                  num(
-                    imputation
-                      .facture
-                      .montantTTC,
-                  ),
-              },
-            }),
-          ),
-
-      mouvementFinance:
-        provision
-          .mouvementFinance
-          ? {
-            ...provision
-              .mouvementFinance,
-
-            montant:
-              num(
-                provision
-                  .mouvementFinance
-                  .montant,
-              ),
-
-            recuEncaissement:
-              provision
-                .mouvementFinance
-                .recuEncaissement
-                ? {
-                  ...provision
-                    .mouvementFinance
-                    .recuEncaissement,
-
-                  montant:
-                    num(
-                      provision
-                        .mouvementFinance
-                        .recuEncaissement
-                        .montant,
-                    ),
-                }
-                : null,
-          }
-          : null,
-    };
+    return serializeBillingProvision(provision);
   }
 
-  // ============================================================
-  // IMPUTATION D'UNE PROVISION
-  // ============================================================
 
-  async createImputation(
-    provisionId: string,
-    dto: CreateImputationProvisionDto,
-    userId: string,
-  ) {
-    if (
-      !Number.isFinite(
-        dto.montant,
-      ) ||
-      dto.montant <= 0
-    ) {
-      throw new BadRequestException(
-        'Le montant à imputer doit être supérieur à zéro.',
-      );
-    }
-
-    return this.prisma
-      .$transaction(
-        async (tx) => {
-          // ======================================================
-          // PROVISION
-          // ======================================================
-
-          const provision =
-            await tx.provision
-              .findUnique({
-                where: {
-                  id:
-                    provisionId,
-                },
-
-                include: {
-                  imputations: {
-                    select: {
-                      id:
-                        true,
-
-                      factureId:
-                        true,
-
-                      montant:
-                        true,
-                    },
-                  },
-                },
-              });
-
-          if (!provision) {
-            throw new NotFoundException(
-              'Provision introuvable.',
-            );
-          }
-
-          /**
-           * Protection des anciennes données.
-           *
-           * Les provisions encore reliées par
-           * Provision.factureId doivent d'abord
-           * être migrées.
-           */
-          if (
-            provision.factureId
-          ) {
-            throw new BadRequestException(
-              'Cette provision utilise encore l’ancienne affectation directe à une facture. Elle doit être migrée avant d’utiliser le nouveau système d’imputation.',
-            );
-          }
-
-          // ======================================================
-          // MONTANT DISPONIBLE DE LA PROVISION
-          // ======================================================
-
-          const montantProvision =
-            num(
-              provision.montant,
-            );
-
-          const totalDejaImpute =
-            provision
-              .imputations
-              .reduce(
-                (
-                  total,
-                  imputation,
-                ) =>
-                  total +
-                  num(
-                    imputation
-                      .montant,
-                  ),
-                0,
-              );
-
-          const montantDisponible =
-            Math.max(
-              montantProvision -
-              totalDejaImpute,
-              0,
-            );
-
-          if (
-            dto.montant >
-            montantDisponible
-          ) {
-            throw new BadRequestException(
-              `Le montant à imputer (${dto.montant.toLocaleString(
-                'fr-FR',
-              )} FCFA) dépasse le montant disponible de la provision (${montantDisponible.toLocaleString(
-                'fr-FR',
-              )} FCFA).`,
-            );
-          }
-
-          // ======================================================
-          // UNE SEULE IMPUTATION PAR COUPLE
-          // PROVISION / FACTURE
-          // ======================================================
-
-          const existingImputation =
-            provision
-              .imputations
-              .find(
-                (
-                  imputation,
-                ) =>
-                  imputation
-                    .factureId ===
-                  dto.factureId,
-              );
-
-          if (
-            existingImputation
-          ) {
-            throw new BadRequestException(
-              'Cette provision possède déjà une imputation sur cette facture.',
-            );
-          }
-
-          // ======================================================
-          // FACTURE
-          // ======================================================
-
-          const facture =
-            await tx.facture
-              .findUnique({
-                where: {
-                  id:
-                    dto.factureId,
-                },
-
-                include: {
-                  paiements: {
-                    select: {
-                      montant:
-                        true,
-                    },
-                  },
-
-                  imputationsProvision: {
-                    select: {
-                      montant:
-                        true,
-                    },
-                  },
-
-                  /**
-                   * Ancien système.
-                   *
-                   * Tant que les données historiques
-                   * ne sont pas nettoyées, elles
-                   * doivent rester prises en compte.
-                   */
-                  provisions: {
-                    select: {
-                      montant:
-                        true,
-                    },
-                  },
-                },
-              });
-
-          if (!facture) {
-            throw new NotFoundException(
-              'Facture introuvable.',
-            );
-          }
-
-          if (
-            facture.dossierId !==
-            provision.dossierId
-          ) {
-            throw new BadRequestException(
-              'La facture et la provision doivent appartenir au même dossier.',
-            );
-          }
-
-          // ======================================================
-          // MONTANT DEJA REGLE SUR LA FACTURE
-          // ======================================================
-
-          const totalPaiements =
-            facture.paiements
-              .reduce(
-                (
-                  total,
-                  paiement,
-                ) =>
-                  total +
-                  num(
-                    paiement.montant,
-                  ),
-                0,
-              );
-
-          const totalImputations =
-            facture
-              .imputationsProvision
-              .reduce(
-                (
-                  total,
-                  imputation,
-                ) =>
-                  total +
-                  num(
-                    imputation.montant,
-                  ),
-                0,
-              );
-
-          const totalLegacyProvisions =
-            facture.provisions
-              .reduce(
-                (
-                  total,
-                  legacyProvision,
-                ) =>
-                  total +
-                  num(
-                    legacyProvision
-                      .montant,
-                  ),
-                0,
-              );
-
-          const montantTTC =
-            num(
-              facture.montantTTC,
-            );
-
-          const totalDejaRegle =
-            totalPaiements +
-            totalImputations +
-            totalLegacyProvisions;
-
-          const soldeFacture =
-            Math.max(
-              montantTTC -
-              totalDejaRegle,
-              0,
-            );
-
-          if (
-            dto.montant >
-            soldeFacture
-          ) {
-            throw new BadRequestException(
-              `Le montant à imputer (${dto.montant.toLocaleString(
-                'fr-FR',
-              )} FCFA) dépasse le solde restant de la facture (${soldeFacture.toLocaleString(
-                'fr-FR',
-              )} FCFA).`,
-            );
-          }
-
-          // ======================================================
-          // CREATION IMPUTATION
-          //
-          // AUCUN MOUVEMENT FINANCE
-          // AUCUN RECU
-          // ======================================================
-
-          const imputation =
-            await tx
-              .imputationProvision
-              .create({
-                data: {
-                  provisionId:
-                    provision.id,
-
-                  factureId:
-                    facture.id,
-
-                  montant:
-                    dto.montant,
-
-                  createdById:
-                    userId,
-                },
-
-                include: {
-                  facture: {
-                    select: {
-                      id:
-                        true,
-
-                      numero:
-                        true,
-
-                      montantTTC:
-                        true,
-
-                      statut:
-                        true,
-                    },
-                  },
-
-                  createdBy: {
-                    select: {
-                      id:
-                        true,
-
-                      name:
-                        true,
-                    },
-                  },
-                },
-              });
-
-          // ======================================================
-          // MISE A JOUR STATUT FACTURE
-          // ======================================================
-
-          const nouveauTotalRegle =
-            totalDejaRegle +
-            dto.montant;
-
-          const nouveauStatut =
-            this
-              .resolveFactureStatut(
-                nouveauTotalRegle,
-                montantTTC,
-              );
-
-          await tx.facture
-            .update({
-              where: {
-                id:
-                  facture.id,
-              },
-
-              data: {
-                statut:
-                  nouveauStatut,
-              },
-            });
-
-          return {
-            ...imputation,
-
-            montant:
-              num(
-                imputation.montant,
-              ),
-
-            facture: {
-              ...imputation.facture,
-
-              montantTTC:
-                num(
-                  imputation
-                    .facture
-                    .montantTTC,
-                ),
-
-              statut:
-                nouveauStatut,
-            },
-
-            provision: {
-              id:
-                provision.id,
-
-              montant:
-                montantProvision,
-
-              montantImpute:
-                totalDejaImpute +
-                dto.montant,
-
-              montantDisponible:
-                montantDisponible -
-                dto.montant,
-            },
-          };
-        },
-
-        {
-          maxWait:
-            10_000,
-
-          timeout:
-            20_000,
-        },
-      );
+  async createImputation(provisionId: string, dto: CreateImputationProvisionDto, userId: string) {
+    const amount = billingAmount(dto.montant);
+    return treasuryTransaction(this.prisma, async tx => {
+      // No cash entry: invoice first, then provision; never acquire a cash-account lock afterwards.
+      await lockBillingRows(tx, 'facture', [dto.factureId]);
+      await lockBillingRows(tx, 'provision', [provisionId]);
+      const [provision, invoice] = await Promise.all([
+        tx.provision.findUnique({ where: { id: provisionId }, include: BILLING_PROVISION_INCLUDE }),
+        tx.facture.findUnique({ where: { id: dto.factureId }, include: BILLING_INVOICE_INCLUDE }),
+      ]);
+      if (!provision || !invoice) throw new NotFoundException('Provision ou facture introuvable.');
+      if (invoice.dossierId !== provision.dossierId || invoice.clientId !== provision.dossier.clientId) throw new BadRequestException('La provision et la facture doivent appartenir au même dossier et au même client.');
+      const available = readProvisionBalance(provision);
+      if (available.montantDisponible === null || recognizedCash(provision.montant, provision.mouvementFinance, provision.dossierId, 'PROVISION') === null) throw new BadRequestException('Cette provision nécessite une vérification de son affectation historique ou de son encaissement avant imputation.');
+      if (provision.imputations.some(row => row.factureId === invoice.id)) throw new BadRequestException('Cette provision possède déjà une imputation sur cette facture.');
+      const balance = readInvoiceBalance(invoice);
+      if (!balance.reglementAutorise || balance.solde === null) throw new BadRequestException('La facture est un brouillon, déjà réglée ou présente une lecture historique ambiguë.');
+      if (amount.greaterThan(available.montantDisponible) || amount.greaterThan(balance.solde)) throw new BadRequestException('Le montant dépasse la provision disponible ou le reste à payer de la facture.');
+      const imputation = await tx.imputationProvision.create({ data: { provisionId, factureId: invoice.id, montant: amount, createdById: userId },
+        include: { createdBy: { select: { id: true, name: true } } } });
+      const settled = new Prisma.Decimal(balance.totalRegle!).plus(amount);
+      const status = resolveInvoiceStatus(settled.toFixed(2), invoice.montantTTC.toFixed(2), invoice.dateEcheance);
+      await tx.facture.update({ where: { id: invoice.id }, data: { statut: status } });
+      if (invoice.fraisOuvertureDossier && status === 'PAYEE' && !invoice.fraisOuvertureDossier.mouvementFinanceId) {
+        await tx.fraisOuvertureDossier.update({ where: { id: invoice.fraisOuvertureDossier.id }, data: { statut: 'PAYE', datePaiement: imputation.dateImputation } });
+      }
+      await tx.activityLog.create({ data: { userId, action: 'PROVISION_IMPUTEE', entityType: 'ImputationProvision',
+        entityId: imputation.id, dossierId: provision.dossierId,
+        metadata: { provisionId, factureId: invoice.id, montantExact: amount.toFixed(2),
+          dateMetier: imputation.dateImputation.toISOString(), statutFactureAvant: invoice.statut, statutFactureApres: status,
+          mouvementFinanceId: provision.mouvementFinanceId, nouvelEncaissement: false },
+      } });
+      return { ...imputation, montant: amount.toNumber(), montantExact: amount.toFixed(2),
+        facture: { id: invoice.id, numero: invoice.numero, montantTTC: invoice.montantTTC.toNumber(), statut: status },
+        provision: { id: provision.id, montant: provision.montant.toNumber(), montantImpute: new Prisma.Decimal(available.montantImpute!).plus(amount).toNumber(),
+          montantDisponible: new Prisma.Decimal(available.montantDisponible).minus(amount).toNumber() } };
+    });
   }
 
-  // ============================================================
-  // RETRAIT D'UNE IMPUTATION
-  // ============================================================
-
-  async removeImputation(
-    provisionId: string,
-    imputationId: string,
-  ) {
-    return this.prisma
-      .$transaction(
-        async (tx) => {
-          // ======================================================
-          // IMPUTATION
-          // ======================================================
-
-          const imputation =
-            await tx
-              .imputationProvision
-              .findFirst({
-                where: {
-                  id:
-                    imputationId,
-
-                  provisionId,
-                },
-              });
-
-          if (!imputation) {
-            throw new NotFoundException(
-              'Imputation introuvable.',
-            );
-          }
-
-          const factureId =
-            imputation.factureId;
-
-          // ======================================================
-          // SUPPRESSION DE L'IMPUTATION
-          //
-          // IMPORTANT :
-          // aucun mouvement Finance n'est supprimé.
-          // aucun reçu n'est supprimé.
-          // ======================================================
-
-          await tx
-            .imputationProvision
-            .delete({
-              where: {
-                id:
-                  imputation.id,
-              },
-            });
-
-          // ======================================================
-          // RECALCUL FACTURE
-          // ======================================================
-
-          const facture =
-            await tx.facture
-              .findUnique({
-                where: {
-                  id:
-                    factureId,
-                },
-
-                include: {
-                  paiements: {
-                    select: {
-                      montant:
-                        true,
-                    },
-                  },
-
-                  imputationsProvision: {
-                    select: {
-                      montant:
-                        true,
-                    },
-                  },
-
-                  provisions: {
-                    select: {
-                      montant:
-                        true,
-                    },
-                  },
-                },
-              });
-
-          if (!facture) {
-            throw new NotFoundException(
-              'Facture introuvable.',
-            );
-          }
-
-          const totalPaiements =
-            facture.paiements
-              .reduce(
-                (
-                  total,
-                  paiement,
-                ) =>
-                  total +
-                  num(
-                    paiement.montant,
-                  ),
-                0,
-              );
-
-          const totalImputations =
-            facture
-              .imputationsProvision
-              .reduce(
-                (
-                  total,
-                  currentImputation,
-                ) =>
-                  total +
-                  num(
-                    currentImputation
-                      .montant,
-                  ),
-                0,
-              );
-
-          const totalLegacyProvisions =
-            facture.provisions
-              .reduce(
-                (
-                  total,
-                  legacyProvision,
-                ) =>
-                  total +
-                  num(
-                    legacyProvision
-                      .montant,
-                  ),
-                0,
-              );
-
-          const totalRegle =
-            totalPaiements +
-            totalImputations +
-            totalLegacyProvisions;
-
-          const montantTTC =
-            num(
-              facture.montantTTC,
-            );
-
-          const statut =
-            this
-              .resolveFactureStatut(
-                totalRegle,
-                montantTTC,
-              );
-
-          await tx.facture
-            .update({
-              where: {
-                id:
-                  facture.id,
-              },
-
-              data: {
-                statut,
-              },
-            });
-
-          // ======================================================
-          // PROVISION APRES RETRAIT
-          // ======================================================
-
-          const provision =
-            await tx.provision
-              .findUniqueOrThrow({
-                where: {
-                  id:
-                    provisionId,
-                },
-
-                include: {
-                  imputations: {
-                    include: {
-                      facture: {
-                        select: {
-                          id:
-                            true,
-
-                          numero:
-                            true,
-
-                          montantTTC:
-                            true,
-
-                          statut:
-                            true,
-                        },
-                      },
-                    },
-                  },
-
-                  mouvementFinance: {
-                    include: {
-                      caisse:
-                        true,
-
-                      recuEncaissement:
-                        true,
-                    },
-                  },
-                },
-              });
-
-          const montantProvision =
-            num(
-              provision.montant,
-            );
-
-          const montantImpute =
-            provision
-              .imputations
-              .reduce(
-                (
-                  total,
-                  currentImputation,
-                ) =>
-                  total +
-                  num(
-                    currentImputation
-                      .montant,
-                  ),
-                0,
-              );
-
-          return {
-            ...provision,
-
-            montant:
-              montantProvision,
-
-            montantImpute,
-
-            montantDisponible:
-              Math.max(
-                montantProvision -
-                montantImpute,
-                0,
-              ),
-
-            factureMiseAJour: {
-              id:
-                facture.id,
-
-              numero:
-                facture.numero,
-
-              statut,
-
-              montantTTC,
-            },
-          };
-        },
-
-        {
-          maxWait:
-            10_000,
-
-          timeout:
-            20_000,
-        },
-      );
+  async removeImputation(provisionId: string, imputationId: string, userId?: string) {
+    if (!userId) throw new UnauthorizedException('Auteur de la suppression requis.');
+    return treasuryTransaction(this.prisma, async tx => {
+      const target = await tx.imputationProvision.findFirst({ where: { id: imputationId, provisionId } });
+      if (!target) throw new NotFoundException('Imputation introuvable.');
+      await lockBillingRows(tx, 'facture', [target.factureId]);
+      await lockBillingRows(tx, 'provision', [provisionId]);
+      const current = await tx.imputationProvision.findFirst({ where: { id: imputationId, provisionId, factureId: target.factureId } });
+      if (!current) throw new NotFoundException('Imputation introuvable.');
+      await tx.imputationProvision.delete({ where: { id: imputationId } });
+      const invoice = await tx.facture.findUniqueOrThrow({ where: { id: target.factureId }, include: BILLING_INVOICE_INCLUDE });
+      const balance = readInvoiceBalance(invoice);
+      // Preserve the existing deletion operation, but never invent a status for an ambiguous history.
+      if (balance.statutCalcule) await tx.facture.update({ where: { id: invoice.id }, data: { statut: balance.statutCalcule } });
+      // Do not infer a reversal of historical opening-fee payment from a missing cash link.
+      const provision = await tx.provision.findUniqueOrThrow({ where: { id: provisionId }, include: BILLING_PROVISION_INCLUDE });
+      await tx.activityLog.create({ data: { userId, action: 'IMPUTATION_PROVISION_RETIREE', entityType: 'ImputationProvision',
+        entityId: current.id, dossierId: provision.dossierId,
+        metadata: { provisionId, factureId: current.factureId, montantExact: current.montant.toFixed(2),
+          auteurInitialId: current.createdById, dateImputationInitiale: current.dateImputation.toISOString(),
+          statutFactureAvant: invoice.statut, statutFactureApres: balance.statutCalcule ?? invoice.statut, mouvementFinanceId: provision.mouvementFinanceId,
+          nouvelEncaissement: false, effetTresorerie: false },
+      } });
+      return { ...serializeBillingProvision(provision), factureMiseAJour: { id: invoice.id, numero: invoice.numero, montantTTC: invoice.montantTTC.toNumber(), statut: balance.statutCalcule ?? invoice.statut }, avertissements: balance.avertissements };
+    });
   }
 }

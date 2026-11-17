@@ -4,12 +4,18 @@ import {
     IsOptional,
     IsString,
     Max,
+    MaxLength,
     Min,
 } from 'class-validator';
 
 export class CreateFinanceAttachmentDto {
     @IsString()
     @IsNotEmpty()
+    @MaxLength(8192)
+    uploadToken: string;
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(255)
     nom: string;
 
     @IsString()

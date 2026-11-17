@@ -1,3 +1,5 @@
+import { UseGuards } from '@nestjs/common';
+import { FinancialDataGuard } from '../../common/guards/financial-data.guard';
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
@@ -16,6 +18,7 @@ export class ClientsController {
   findAll() {
     return this.clientsService.findAll();
   }
+  @UseGuards(FinancialDataGuard)
   @Get(':id/livre-paiements')
   getLivrePaiements(@Param('id') id: string) {
     return this.clientsService.getLivrePaiements(id);
